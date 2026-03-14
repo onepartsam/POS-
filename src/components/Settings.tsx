@@ -77,7 +77,8 @@ export default function Settings() {
           password: accountPassword || undefined,
           address: currentTenant.address,
           registration_number: currentTenant.registration_number,
-          is_super_admin: currentTenant.is_super_admin
+          is_super_admin: currentTenant.is_super_admin,
+          logo_url: storeLogoUrl
         })
       });
       
@@ -330,6 +331,49 @@ export default function Settings() {
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
         <h2 className="text-lg font-semibold mb-4">Account Settings</h2>
         <form onSubmit={handleSaveAccountInfo} className="space-y-4">
+          <div className="flex items-center gap-6 mb-6">
+            <div className="relative group">
+              <div className="w-24 h-24 rounded-2xl border-2 border-dashed border-gray-200 overflow-hidden bg-gray-50 flex items-center justify-center transition-colors group-hover:border-black/20">
+                {storeLogoUrl ? (
+                  <img src={storeLogoUrl} alt="Store Logo" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="text-gray-400 flex flex-col items-center">
+                    <Plus size={24} />
+                    <span className="text-[10px] mt-1 font-medium">LOGO</span>
+                  </div>
+                )}
+              </div>
+              <input 
+                type="file" 
+                accept="image/*"
+                ref={logoInputRef}
+                onChange={handleLogoUpload}
+                className="hidden" 
+              />
+              <button 
+                type="button"
+                onClick={() => logoInputRef.current?.click()}
+                className="absolute -bottom-2 -right-2 p-2 bg-white shadow-md border border-gray-100 rounded-lg text-gray-600 hover:text-black transition-all hover:scale-110"
+                title="Upload Logo"
+              >
+                <Edit2 size={14} />
+              </button>
+            </div>
+            <div className="flex-1">
+              <h3 className="font-medium text-gray-900">Store Logo</h3>
+              <p className="text-sm text-gray-500">This logo will be displayed on your POS and invoices. Recommended size: 320x320px.</p>
+              {storeLogoUrl && (
+                <button 
+                  type="button"
+                  onClick={() => setStoreLogoUrl('')}
+                  className="text-xs text-red-500 hover:text-red-700 font-medium mt-1"
+                >
+                  Remove Logo
+                </button>
+              )}
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
@@ -416,39 +460,6 @@ export default function Settings() {
               placeholder="e.g. REG-123456789" 
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black/5 focus:outline-none"
             />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Store Logo (320x320 recommended)</label>
-            <div className="flex items-center gap-4">
-              {storeLogoUrl && (
-                <div className="w-16 h-16 rounded-lg border border-gray-200 overflow-hidden bg-gray-50">
-                  <img src={storeLogoUrl} alt="Store Logo" className="w-full h-full object-cover" />
-                </div>
-              )}
-              <input 
-                type="file" 
-                accept="image/*"
-                ref={logoInputRef}
-                onChange={handleLogoUpload}
-                className="hidden" 
-              />
-              <button 
-                type="button"
-                onClick={() => logoInputRef.current?.click()}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors text-sm font-medium"
-              >
-                {storeLogoUrl ? 'Change Logo' : 'Upload Logo'}
-              </button>
-              {storeLogoUrl && (
-                <button 
-                  type="button"
-                  onClick={() => setStoreLogoUrl('')}
-                  className="text-red-500 hover:text-red-700 text-sm font-medium"
-                >
-                  Remove
-                </button>
-              )}
-            </div>
           </div>
           <div className="pt-2">
             <button 
