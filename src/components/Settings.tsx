@@ -95,50 +95,6 @@ export default function Settings() {
     }
   };
 
-  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !currentTenant) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = 320;
-        canvas.height = 320;
-        const ctx = canvas.getContext('2d');
-        ctx?.drawImage(img, 0, 0, 320, 320);
-        const dataUrl = canvas.toDataURL('image/jpeg');
-        
-        uploadLogo(dataUrl);
-      };
-      img.src = event.target?.result as string;
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const uploadLogo = async (dataUrl: string) => {
-    if (!currentTenant) return;
-    try {
-      const res = await fetch(`/api/tenants/${currentTenant.id}/logo`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ logo_url: dataUrl })
-      });
-      
-      const data = await res.json();
-      if (res.ok) {
-        setCurrentTenant({ ...currentTenant, logo_url: data.logo_url });
-        alert('Logo uploaded successfully.');
-      } else {
-        alert(data.error || 'Failed to upload logo.');
-      }
-    } catch (err) {
-      console.error(err);
-      alert('Failed to upload logo.');
-    }
-  };
-
   const handleSaveStoreInfo = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentTenant) return;
@@ -406,30 +362,14 @@ export default function Settings() {
 
       {/* Store Information */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-        <h2 className="text-lg font-semibold mb-4">Store Settings</h2>
+        <h2 className="text-lg font-semibold mb-4">Store Information</h2>
         <form onSubmit={handleSaveStoreInfo} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Store Logo</label>
-            <div className="flex items-center gap-4">
-              {currentTenant?.logo_url ? (
-                <img src={currentTenant.logo_url} alt="Store Logo" className="w-24 h-24 object-cover rounded-lg border border-gray-200" />
-              ) : (
-                <div className="w-24 h-24 flex items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-400 text-xs">No Logo</div>
-              )}
-              <input 
-                type="file" 
-                accept="image/*"
-                onChange={handleLogoUpload}
-                className="text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-black file:text-white hover:file:bg-gray-800"
-              />
-            </div>
-          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Store Address</label>
             <textarea 
               value={storeAddress}
               onChange={e => setStoreAddress(e.target.value)}
-              placeholder="123 Main St, City, Country" 
+              placeholder="217 Henderson Rd, #02-06, Singapore 159555" 
               rows={3}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black/5 focus:outline-none resize-none"
             />
