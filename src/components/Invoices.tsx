@@ -53,6 +53,27 @@ export default function Invoices() {
     window.print();
   };
 
+  const handleEmail = async () => {
+    const email = window.prompt('Enter email address to send invoice:');
+    if (!email) return;
+
+    try {
+      const res = await fetch(`/api/invoices/${selectedInvoice.id}/email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      if (res.ok) {
+        alert('Invoice sent successfully!');
+      } else {
+        alert('Failed to send invoice.');
+      }
+    } catch (err) {
+      console.error('Failed to send email', err);
+      alert('Failed to send email.');
+    }
+  };
+
   if (!currentTenant) return <div className="p-8">Please select a tenant first.</div>;
 
   return (
@@ -129,6 +150,12 @@ export default function Invoices() {
                 >
                   <Printer size={20} />
                   <span className="text-sm font-medium">Print</span>
+                </button>
+                <button 
+                  onClick={handleEmail}
+                  className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-2"
+                >
+                  <span className="text-sm font-medium">Email</span>
                 </button>
                 <button 
                   onClick={() => setSelectedInvoice(null)}
@@ -213,6 +240,10 @@ export default function Invoices() {
                     <span className="font-bold text-gray-900">${selectedInvoice.total.toFixed(2)}</span>
                   </div>
                 </div>
+              </div>
+              <div className="mt-12 pt-6 border-t border-gray-200 text-center text-sm text-gray-500">
+                <p>Powered by POS+</p>
+                <p>Find out more at www.pos-plus.com</p>
               </div>
             </div>
           </div>

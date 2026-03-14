@@ -1,5 +1,6 @@
 import express from 'express';
 import { createClient } from '@supabase/supabase-js';
+import nodemailer from 'nodemailer';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://wotypimhxwjpsvgvxcch.supabase.co';
 const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_kcowi3rGFpzG4Fwlt84Zaw_aNFhT6-m';
@@ -234,6 +235,36 @@ app.put('/api/invoices/:id/status', async (req, res) => {
   const { error } = await supabase.from('invoices').update({ status }).eq('id', invoiceId);
   if (error) return res.status(500).json({ error: 'Failed to update status' });
   res.json({ success: true });
+});
+
+app.post('/api/invoices/:id/email', async (req, res) => {
+  const { email } = req.body;
+  const invoiceId = req.params.id;
+  
+  const { data: invoice } = await supabase.from('invoices').select('*').eq('id', invoiceId).single();
+  if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
+
+  const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT),
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
+
+  try {
+    await transporter.sendMail({
+      from: process.env.SMTP_USER,
+      to: email,
+      subject: `Invoice #${invoiceId.toString().padStart(5, '0')}`,
+      text: `Invoice details for #${invoiceId.toString().padStart(5, '0')}: Total $${invoice.total.toFixed(2)}`,
+    });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Failed to send email', err);
+    res.status(500).json({ error: 'Failed to send email' });
+  }
 });
 
 app.post('/api/invoices', async (req, res) => {
