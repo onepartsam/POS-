@@ -261,9 +261,9 @@ app.post('/api/invoices/:id/email', async (req, res) => {
       text: `Invoice details for #${invoiceId.toString().padStart(5, '0')}: Total $${invoice.total.toFixed(2)}`,
     });
     res.json({ success: true });
-  } catch (err) {
+  } catch (err: any) {
     console.error('Failed to send email', err);
-    res.status(500).json({ error: 'Failed to send email' });
+    res.status(500).json({ error: `Failed to send email: ${err.message}` });
   }
 });
 
