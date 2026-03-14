@@ -1,7 +1,11 @@
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
-import db from './src/db.ts';
 import path from 'path';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://wotypimhxwjpsvgvxcch.supabase.co';
+const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_kcowi3rGFpzG4Fwlt84Zaw_aNFhT6-m';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function startServer() {
   const app = express();
@@ -13,22 +17,27 @@ async function startServer() {
   // --- API Routes ---
 
   // Tenants
-  app.get('/api/tenants', (req, res) => {
+  app.get('/api/tenants', async (req, res) => {
     const tenantId = req.query.tenantId;
-    if (!tenantId) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-    const requestor = db.prepare('SELECT is_super_admin FROM tenants WHERE id = ?').get(tenantId);
+    if (!tenantId) return res.status(401).json({ error: 'Unauthorized' });
+    
+    const { data: requestor } = await supabase.from('tenants').select('is_super_admin').eq('id', tenantId).single();
     if (!requestor || !requestor.is_super_admin) {
       return res.status(403).json({ error: 'Forbidden. Super Admin access required.' });
     }
-    const tenants = db.prepare('SELECT id, name, username, email, contact_number, tax_percentage, created_at, is_super_admin FROM tenants').all();
+    
+    const { data: tenants } = await supabase.from('tenants').select('id, name, username, email, contact_number, tax_percentage, created_at, is_super_admin');
     res.json(tenants);
   });
 
-  app.post('/api/tenants/login', (req, res) => {
+  app.post('/api/tenants/login', async (req, res) => {
     const { username, password } = req.body;
-    const tenant = db.prepare('SELECT id, name, username, email, contact_number, tax_percentage, is_super_admin FROM tenants WHERE username = ? COLLATE NOCASE AND password = ?').get(username, password);
+    const { data: tenant } = await supabase.from('tenants')
+      .select('id, name, username, email, contact_number, tax_percentage, is_super_admin')
+      .ilike('username', username)
+      .eq('password', password)
+      .single();
+      
     if (tenant) {
       res.json({ ...tenant, is_super_admin: !!tenant.is_super_admin });
     } else {
@@ -36,85 +45,86 @@ async function startServer() {
     }
   });
 
-  app.post('/api/tenants/forgot-password', (req, res) => {
+  app.post('/api/tenants/forgot-password', async (req, res) => {
     const { username, email } = req.body;
-    const tenant = db.prepare('SELECT password FROM tenants WHERE username = ? COLLATE NOCASE AND email = ? COLLATE NOCASE').get(username, email);
+    const { data: tenant } = await supabase.from('tenants')
+      .select('password')
+      .ilike('username', username)
+      .ilike('email', email)
+      .single();
+      
     if (tenant) {
-      // In a real app, send an email. For this prototype, we'll just return it.
       res.json({ success: true, password: tenant.password });
     } else {
       res.status(404).json({ error: 'No account found with that username and email' });
     }
   });
 
-  app.post('/api/tenants', (req, res) => {
+  app.post('/api/tenants', async (req, res) => {
     const { name, username, email, contact_number, address, registration_number, password, is_super_admin } = req.body;
     
-    // Check if exists
-    const existing = db.prepare('SELECT id FROM tenants WHERE username = ? COLLATE NOCASE').get(username);
+    const { data: existing } = await supabase.from('tenants').select('id').ilike('username', username).maybeSingle();
     if (existing) {
-      res.status(400).json({ error: 'Username already exists' });
-      return;
+      return res.status(400).json({ error: 'Username already exists' });
     }
 
-    const stmt = db.prepare('INSERT INTO tenants (name, username, email, contact_number, address, registration_number, password, is_super_admin) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-    const info = stmt.run(name, username, email, contact_number, address || null, registration_number || null, password, is_super_admin ? 1 : 0);
-    const newTenant = db.prepare('SELECT id, name, username, email, contact_number, address, registration_number, tax_percentage, is_super_admin FROM tenants WHERE id = ?').get(info.lastInsertRowid);
+    const { data: newTenant, error } = await supabase.from('tenants').insert({
+      name, username, email, contact_number, address: address || null, registration_number: registration_number || null, password, is_super_admin: is_super_admin ? 1 : 0
+    }).select('id, name, username, email, contact_number, address, registration_number, tax_percentage, is_super_admin').single();
+    
+    if (error) return res.status(500).json({ error: error.message });
     res.json({ ...newTenant, is_super_admin: !!newTenant.is_super_admin });
   });
 
-  app.put('/api/tenants/:id', (req, res) => {
+  app.put('/api/tenants/:id', async (req, res) => {
     const tenantId = req.query.tenantId;
-    if (!tenantId) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-    const requestor = db.prepare('SELECT is_super_admin FROM tenants WHERE id = ?').get(tenantId);
+    if (!tenantId) return res.status(401).json({ error: 'Unauthorized' });
+    
+    const { data: requestor } = await supabase.from('tenants').select('is_super_admin').eq('id', tenantId).single();
     if (!requestor || (!requestor.is_super_admin && String(tenantId) !== String(req.params.id))) {
       return res.status(403).json({ error: 'Forbidden. Super Admin access or self-edit required.' });
     }
 
     let { name, username, email, contact_number, address, registration_number, password, is_super_admin } = req.body;
     
-    // If not super admin, prevent changing is_super_admin status
     if (!requestor.is_super_admin) {
-      const currentTarget = db.prepare('SELECT is_super_admin FROM tenants WHERE id = ?').get(req.params.id);
+      const { data: currentTarget } = await supabase.from('tenants').select('is_super_admin').eq('id', req.params.id).single();
       is_super_admin = currentTarget ? currentTarget.is_super_admin : 0;
     }
     
-    // Check if username exists for another tenant
-    const existing = db.prepare('SELECT id FROM tenants WHERE username = ? COLLATE NOCASE AND id != ?').get(username, req.params.id);
+    const { data: existing } = await supabase.from('tenants').select('id').ilike('username', username).neq('id', req.params.id).maybeSingle();
     if (existing) {
       return res.status(400).json({ error: 'Username already exists' });
     }
 
-    const currentTenant = db.prepare('SELECT address, registration_number FROM tenants WHERE id = ?').get(req.params.id);
-    const finalAddress = address !== undefined ? (address || null) : currentTenant.address;
-    const finalRegNumber = registration_number !== undefined ? (registration_number || null) : currentTenant.registration_number;
+    const { data: currentTenant } = await supabase.from('tenants').select('address, registration_number').eq('id', req.params.id).single();
+    const finalAddress = address !== undefined ? (address || null) : currentTenant?.address;
+    const finalRegNumber = registration_number !== undefined ? (registration_number || null) : currentTenant?.registration_number;
 
-    if (password) {
-      db.prepare('UPDATE tenants SET name = ?, username = ?, email = ?, contact_number = ?, address = ?, registration_number = ?, password = ?, is_super_admin = ? WHERE id = ?')
-        .run(name, username, email, contact_number, finalAddress, finalRegNumber, password, is_super_admin ? 1 : 0, req.params.id);
-    } else {
-      db.prepare('UPDATE tenants SET name = ?, username = ?, email = ?, contact_number = ?, address = ?, registration_number = ?, is_super_admin = ? WHERE id = ?')
-        .run(name, username, email, contact_number, finalAddress, finalRegNumber, is_super_admin ? 1 : 0, req.params.id);
-    }
+    const updateData: any = {
+      name, username, email, contact_number, address: finalAddress, registration_number: finalRegNumber, is_super_admin: is_super_admin ? 1 : 0
+    };
+    if (password) updateData.password = password;
+
+    await supabase.from('tenants').update(updateData).eq('id', req.params.id);
     
-    const updatedTenant = db.prepare('SELECT id, name, username, email, contact_number, address, registration_number, tax_percentage, is_super_admin FROM tenants WHERE id = ?').get(req.params.id);
-    res.json({ success: true, tenant: { ...updatedTenant, is_super_admin: !!updatedTenant.is_super_admin } });
+    const { data: updatedTenant } = await supabase.from('tenants').select('id, name, username, email, contact_number, address, registration_number, tax_percentage, is_super_admin').eq('id', req.params.id).single();
+    res.json({ success: true, tenant: { ...updatedTenant, is_super_admin: !!updatedTenant?.is_super_admin } });
   });
 
-  app.put('/api/tenants/:id/settings', (req, res) => {
+  app.put('/api/tenants/:id/settings', async (req, res) => {
     const { tax_percentage, address, registration_number } = req.body;
-    db.prepare('UPDATE tenants SET tax_percentage = ?, address = ?, registration_number = ? WHERE id = ?').run(tax_percentage, address || null, registration_number || null, req.params.id);
+    await supabase.from('tenants').update({
+      tax_percentage, address: address || null, registration_number: registration_number || null
+    }).eq('id', req.params.id);
     res.json({ success: true });
   });
 
-  app.delete('/api/tenants/:id', (req, res) => {
+  app.delete('/api/tenants/:id', async (req, res) => {
     const tenantId = req.query.tenantId;
-    if (!tenantId) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-    const requestor = db.prepare('SELECT is_super_admin FROM tenants WHERE id = ?').get(tenantId);
+    if (!tenantId) return res.status(401).json({ error: 'Unauthorized' });
+    
+    const { data: requestor } = await supabase.from('tenants').select('is_super_admin').eq('id', tenantId).single();
     if (!requestor || !requestor.is_super_admin) {
       return res.status(403).json({ error: 'Forbidden. Super Admin access required.' });
     }
@@ -123,113 +133,101 @@ async function startServer() {
     }
     
     // Delete tenant and associated data
-    db.transaction(() => {
-      db.prepare('DELETE FROM invoice_items WHERE invoice_id IN (SELECT id FROM invoices WHERE tenant_id = ?)').run(req.params.id);
-      db.prepare('DELETE FROM invoices WHERE tenant_id = ?').run(req.params.id);
-      db.prepare('DELETE FROM products WHERE tenant_id = ?').run(req.params.id);
-      db.prepare('DELETE FROM payment_methods WHERE tenant_id = ?').run(req.params.id);
-      db.prepare('DELETE FROM discount_codes WHERE tenant_id = ?').run(req.params.id);
-      db.prepare('DELETE FROM taxes WHERE tenant_id = ?').run(req.params.id);
-      db.prepare('DELETE FROM tenants WHERE id = ?').run(req.params.id);
-    })();
+    const { data: invoices } = await supabase.from('invoices').select('id').eq('tenant_id', req.params.id);
+    if (invoices && invoices.length > 0) {
+      const invoiceIds = invoices.map(i => i.id);
+      await supabase.from('invoice_items').delete().in('invoice_id', invoiceIds);
+    }
+    await supabase.from('invoices').delete().eq('tenant_id', req.params.id);
+    await supabase.from('products').delete().eq('tenant_id', req.params.id);
+    await supabase.from('payment_methods').delete().eq('tenant_id', req.params.id);
+    await supabase.from('discount_codes').delete().eq('tenant_id', req.params.id);
+    await supabase.from('taxes').delete().eq('tenant_id', req.params.id);
+    await supabase.from('tenants').delete().eq('id', req.params.id);
     
     res.json({ success: true });
   });
 
   // Products
-  app.get('/api/products', (req, res) => {
+  app.get('/api/products', async (req, res) => {
     const tenantId = req.query.tenantId;
-    if (!tenantId) {
-      res.status(400).json({ error: 'tenantId is required' });
-      return;
-    }
-    const products = db.prepare('SELECT * FROM products WHERE tenant_id = ?').all(tenantId);
-    res.json(products.map((p: any) => {
-      const sizes = p.sizes ? JSON.parse(p.sizes) : [];
-      const colors = p.colors ? JSON.parse(p.colors) : [];
-      let variations = p.variations ? JSON.parse(p.variations) : [];
+    if (!tenantId) return res.status(400).json({ error: 'tenantId is required' });
+    
+    const { data: products } = await supabase.from('products').select('*').eq('tenant_id', tenantId);
+    
+    res.json((products || []).map((p: any) => {
+      const sizes = typeof p.sizes === 'string' ? JSON.parse(p.sizes) : (p.sizes || []);
+      const colors = typeof p.colors === 'string' ? JSON.parse(p.colors) : (p.colors || []);
+      let variations = typeof p.variations === 'string' ? JSON.parse(p.variations) : (p.variations || []);
       
-      // Migrate legacy sizes and colors to variations for the frontend
       if (variations.length === 0) {
         if (sizes.length > 0) variations.push({ name: 'Size', options: sizes });
         if (colors.length > 0) variations.push({ name: 'Color', options: colors });
       }
 
-      return {
-        ...p,
-        sizes,
-        colors,
-        variations
-      };
+      return { ...p, sizes, colors, variations };
     }));
   });
 
-  app.post('/api/products', (req, res) => {
+  app.post('/api/products', async (req, res) => {
     const { tenant_id, name, price, category, image, stock, sizes, colors, variations } = req.body;
-    const stmt = db.prepare(`
-      INSERT INTO products (tenant_id, name, price, category, image, stock, sizes, colors, variations)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    const info = stmt.run(
+    const { data: info, error } = await supabase.from('products').insert({
       tenant_id, name, price, category, image, stock, 
-      JSON.stringify(sizes || []), JSON.stringify(colors || []), JSON.stringify(variations || [])
-    );
-    res.json({ id: info.lastInsertRowid });
+      sizes: JSON.stringify(sizes || []), colors: JSON.stringify(colors || []), variations: JSON.stringify(variations || [])
+    }).select('id').single();
+    
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ id: info.id });
   });
 
-  app.put('/api/products/:id', (req, res) => {
+  app.put('/api/products/:id', async (req, res) => {
     const { name, price, category, image, stock, sizes, colors, variations } = req.body;
-    const stmt = db.prepare(`
-      UPDATE products 
-      SET name = ?, price = ?, category = ?, image = ?, stock = ?, sizes = ?, colors = ?, variations = ?
-      WHERE id = ?
-    `);
-    stmt.run(
+    await supabase.from('products').update({
       name, price, category, image, stock, 
-      JSON.stringify(sizes || []), JSON.stringify(colors || []), JSON.stringify(variations || []),
-      req.params.id
-    );
+      sizes: JSON.stringify(sizes || []), colors: JSON.stringify(colors || []), variations: JSON.stringify(variations || [])
+    }).eq('id', req.params.id);
     res.json({ success: true });
   });
 
-  app.delete('/api/products/:id', (req, res) => {
-    db.prepare('DELETE FROM products WHERE id = ?').run(req.params.id);
+  app.delete('/api/products/:id', async (req, res) => {
+    await supabase.from('products').delete().eq('id', req.params.id);
     res.json({ success: true });
   });
 
-  app.put('/api/products/:id/stock', (req, res) => {
+  app.put('/api/products/:id/stock', async (req, res) => {
     const { stock } = req.body;
-    db.prepare('UPDATE products SET stock = ? WHERE id = ?').run(stock, req.params.id);
+    await supabase.from('products').update({ stock }).eq('id', req.params.id);
     res.json({ success: true });
   });
 
   // Invoices
-  app.get('/api/invoices', (req, res) => {
+  app.get('/api/invoices', async (req, res) => {
     const tenantId = req.query.tenantId;
-    if (!tenantId) {
-      res.status(400).json({ error: 'tenantId is required' });
-      return;
-    }
-    const invoices = db.prepare('SELECT * FROM invoices WHERE tenant_id = ? ORDER BY created_at DESC').all(tenantId);
-    res.json(invoices);
+    if (!tenantId) return res.status(400).json({ error: 'tenantId is required' });
+    
+    const { data: invoices } = await supabase.from('invoices').select('*').eq('tenant_id', tenantId).order('created_at', { ascending: false });
+    res.json(invoices || []);
   });
 
-  app.get('/api/invoices/:id', (req, res) => {
+  app.get('/api/invoices/:id', async (req, res) => {
     const invoiceId = req.params.id;
-    const invoice = db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoiceId);
+    const { data: invoice } = await supabase.from('invoices').select('*').eq('id', invoiceId).single();
     if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
     
-    const items = db.prepare(`
-      SELECT ii.*, p.name as product_name 
-      FROM invoice_items ii 
-      JOIN products p ON ii.product_id = p.id 
-      WHERE ii.invoice_id = ?
-    `).all(invoiceId);
+    const { data: items } = await supabase.from('invoice_items').select(`
+      *,
+      products!inner(name)
+    `).eq('invoice_id', invoiceId);
     
-    res.json({ ...invoice, items });
+    const formattedItems = (items || []).map((item: any) => ({
+      ...item,
+      product_name: item.products?.name
+    }));
+    
+    res.json({ ...invoice, items: formattedItems });
   });
 
-  app.put('/api/invoices/:id/status', (req, res) => {
+  app.put('/api/invoices/:id/status', async (req, res) => {
     const { status } = req.body;
     const invoiceId = req.params.id;
     
@@ -237,113 +235,115 @@ async function startServer() {
       return res.status(400).json({ error: 'Invalid status' });
     }
 
-    try {
-      db.prepare('UPDATE invoices SET status = ? WHERE id = ?').run(status, invoiceId);
-      res.json({ success: true });
-    } catch (err) {
-      res.status(500).json({ error: 'Failed to update status' });
-    }
-  });
-
-  app.post('/api/invoices', (req, res) => {
-    const { tenant_id, total, tax, discount, items, status = 'Completed' } = req.body;
-    
-    const insertInvoice = db.transaction(() => {
-      const invoiceStmt = db.prepare('INSERT INTO invoices (tenant_id, total, tax, discount, status) VALUES (?, ?, ?, ?, ?)');
-      const invoiceInfo = invoiceStmt.run(tenant_id, total, tax, discount, status);
-      const invoiceId = invoiceInfo.lastInsertRowid;
-
-      const itemStmt = db.prepare('INSERT INTO invoice_items (invoice_id, product_id, quantity, price, size, color, variations) VALUES (?, ?, ?, ?, ?, ?, ?)');
-      for (const item of items) {
-        itemStmt.run(invoiceId, item.id, item.quantity, item.price, item.selectedSize || null, item.selectedColor || null, item.selectedVariations ? JSON.stringify(item.selectedVariations) : null);
-        
-        // Update stock
-        db.prepare('UPDATE products SET stock = stock - ? WHERE id = ?').run(item.quantity, item.id);
-      }
-      return invoiceId;
-    });
-
-    try {
-      const invoiceId = insertInvoice();
-      res.json({ id: invoiceId });
-    } catch (err) {
-      res.status(500).json({ error: 'Failed to create invoice' });
-    }
-  });
-
-  // Payment Methods
-  app.get('/api/payment-methods', (req, res) => {
-    const tenantId = req.query.tenantId;
-    if (!tenantId) return res.status(400).json({ error: 'tenantId is required' });
-    const methods = db.prepare('SELECT * FROM payment_methods WHERE tenant_id = ?').all(tenantId);
-    res.json(methods);
-  });
-
-  app.post('/api/payment-methods', (req, res) => {
-    const { tenant_id, name } = req.body;
-    const info = db.prepare('INSERT INTO payment_methods (tenant_id, name) VALUES (?, ?)').run(tenant_id, name);
-    res.json({ id: info.lastInsertRowid, name });
-  });
-
-  app.put('/api/payment-methods/:id', (req, res) => {
-    const { name } = req.body;
-    db.prepare('UPDATE payment_methods SET name = ? WHERE id = ?').run(name, req.params.id);
+    const { error } = await supabase.from('invoices').update({ status }).eq('id', invoiceId);
+    if (error) return res.status(500).json({ error: 'Failed to update status' });
     res.json({ success: true });
   });
 
-  app.delete('/api/payment-methods/:id', (req, res) => {
-    db.prepare('DELETE FROM payment_methods WHERE id = ?').run(req.params.id);
+  app.post('/api/invoices', async (req, res) => {
+    const { tenant_id, total, tax, discount, items, status = 'Completed' } = req.body;
+    
+    const { data: invoice, error: invoiceError } = await supabase.from('invoices').insert({
+      tenant_id, total, tax, discount, status
+    }).select('id').single();
+    
+    if (invoiceError || !invoice) return res.status(500).json({ error: 'Failed to create invoice' });
+    
+    const invoiceId = invoice.id;
+    
+    for (const item of items) {
+      await supabase.from('invoice_items').insert({
+        invoice_id: invoiceId, product_id: item.id, quantity: item.quantity, price: item.price, 
+        size: item.selectedSize || null, color: item.selectedColor || null, 
+        variations: item.selectedVariations ? JSON.stringify(item.selectedVariations) : null
+      });
+      
+      // Update stock
+      const { data: product } = await supabase.from('products').select('stock').eq('id', item.id).single();
+      if (product) {
+        await supabase.from('products').update({ stock: product.stock - item.quantity }).eq('id', item.id);
+      }
+    }
+    
+    res.json({ id: invoiceId });
+  });
+
+  // Payment Methods
+  app.get('/api/payment-methods', async (req, res) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenantId is required' });
+    const { data: methods } = await supabase.from('payment_methods').select('*').eq('tenant_id', tenantId);
+    res.json(methods || []);
+  });
+
+  app.post('/api/payment-methods', async (req, res) => {
+    const { tenant_id, name } = req.body;
+    const { data: info } = await supabase.from('payment_methods').insert({ tenant_id, name }).select('id').single();
+    res.json({ id: info?.id, name });
+  });
+
+  app.put('/api/payment-methods/:id', async (req, res) => {
+    const { name } = req.body;
+    await supabase.from('payment_methods').update({ name }).eq('id', req.params.id);
+    res.json({ success: true });
+  });
+
+  app.delete('/api/payment-methods/:id', async (req, res) => {
+    await supabase.from('payment_methods').delete().eq('id', req.params.id);
     res.json({ success: true });
   });
 
   // Discount Codes
-  app.get('/api/discount-codes', (req, res) => {
+  app.get('/api/discount-codes', async (req, res) => {
     const tenantId = req.query.tenantId;
     if (!tenantId) return res.status(400).json({ error: 'tenantId is required' });
-    const codes = db.prepare('SELECT * FROM discount_codes WHERE tenant_id = ?').all(tenantId);
-    res.json(codes);
+    const { data: codes } = await supabase.from('discount_codes').select('*').eq('tenant_id', tenantId);
+    res.json(codes || []);
   });
 
-  app.post('/api/discount-codes', (req, res) => {
+  app.post('/api/discount-codes', async (req, res) => {
     const { tenant_id, code, discount_type, discount_value, min_spending } = req.body;
-    const info = db.prepare('INSERT INTO discount_codes (tenant_id, code, discount_percentage, discount_type, discount_value, min_spending) VALUES (?, ?, ?, ?, ?, ?)').run(tenant_id, code, discount_value, discount_type || 'percent', discount_value, min_spending || 0);
-    res.json({ id: info.lastInsertRowid, code, discount_type: discount_type || 'percent', discount_value, min_spending: min_spending || 0 });
+    const { data: info } = await supabase.from('discount_codes').insert({
+      tenant_id, code, discount_percentage: discount_value, discount_type: discount_type || 'percent', discount_value, min_spending: min_spending || 0
+    }).select('id').single();
+    res.json({ id: info?.id, code, discount_type: discount_type || 'percent', discount_value, min_spending: min_spending || 0 });
   });
 
-  app.put('/api/discount-codes/:id', (req, res) => {
+  app.put('/api/discount-codes/:id', async (req, res) => {
     const { code, discount_type, discount_value, min_spending } = req.body;
-    db.prepare('UPDATE discount_codes SET code = ?, discount_type = ?, discount_value = ?, min_spending = ? WHERE id = ?')
-      .run(code, discount_type || 'percent', discount_value, min_spending || 0, req.params.id);
+    await supabase.from('discount_codes').update({
+      code, discount_type: discount_type || 'percent', discount_value, min_spending: min_spending || 0
+    }).eq('id', req.params.id);
     res.json({ success: true });
   });
 
-  app.delete('/api/discount-codes/:id', (req, res) => {
-    db.prepare('DELETE FROM discount_codes WHERE id = ?').run(req.params.id);
+  app.delete('/api/discount-codes/:id', async (req, res) => {
+    await supabase.from('discount_codes').delete().eq('id', req.params.id);
     res.json({ success: true });
   });
 
   // Taxes
-  app.get('/api/taxes', (req, res) => {
+  app.get('/api/taxes', async (req, res) => {
     const tenantId = req.query.tenantId;
     if (!tenantId) return res.status(400).json({ error: 'tenantId is required' });
-    const taxes = db.prepare('SELECT * FROM taxes WHERE tenant_id = ?').all(tenantId);
-    res.json(taxes);
+    const { data: taxes } = await supabase.from('taxes').select('*').eq('tenant_id', tenantId);
+    res.json(taxes || []);
   });
 
-  app.post('/api/taxes', (req, res) => {
+  app.post('/api/taxes', async (req, res) => {
     const { tenant_id, name, percentage } = req.body;
-    const info = db.prepare('INSERT INTO taxes (tenant_id, name, percentage) VALUES (?, ?, ?)').run(tenant_id, name, percentage);
-    res.json({ id: info.lastInsertRowid, name, percentage });
+    const { data: info } = await supabase.from('taxes').insert({ tenant_id, name, percentage }).select('id').single();
+    res.json({ id: info?.id, name, percentage });
   });
 
-  app.put('/api/taxes/:id', (req, res) => {
+  app.put('/api/taxes/:id', async (req, res) => {
     const { name, percentage } = req.body;
-    db.prepare('UPDATE taxes SET name = ?, percentage = ? WHERE id = ?').run(name, percentage, req.params.id);
+    await supabase.from('taxes').update({ name, percentage }).eq('id', req.params.id);
     res.json({ success: true });
   });
 
-  app.delete('/api/taxes/:id', (req, res) => {
-    db.prepare('DELETE FROM taxes WHERE id = ?').run(req.params.id);
+  app.delete('/api/taxes/:id', async (req, res) => {
+    await supabase.from('taxes').delete().eq('id', req.params.id);
     res.json({ success: true });
   });
 
