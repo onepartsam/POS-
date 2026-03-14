@@ -11,11 +11,13 @@ export default function Auth() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccessMsg('');
+    setLoading(true);
 
     if (view === 'forgot') {
       try {
@@ -32,6 +34,8 @@ export default function Auth() {
         }
       } catch (err) {
         setError('Network error occurred');
+      } finally {
+        setLoading(false);
       }
       return;
     }
@@ -57,6 +61,8 @@ export default function Auth() {
       }
     } catch (err) {
       setError('Network error occurred');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -150,11 +156,16 @@ export default function Auth() {
           <div>
             <button
               type="submit"
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-black hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black"
+              disabled={loading}
+              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-black hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black disabled:opacity-50"
             >
-              {view === 'login' && 'Sign In'}
-              {view === 'register' && 'Register'}
-              {view === 'forgot' && 'Recover Password'}
+              {loading ? <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : (
+                <>
+                  {view === 'login' && 'Sign In'}
+                  {view === 'register' && 'Register'}
+                  {view === 'forgot' && 'Recover Password'}
+                </>
+              )}
             </button>
           </div>
           

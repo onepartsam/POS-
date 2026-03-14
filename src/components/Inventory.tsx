@@ -2,10 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useTenant } from '../App';
 import { Pencil, Trash2, Plus, X, Upload } from 'lucide-react';
 import { Variation } from '../types';
+import LoadingSpinner from './LoadingSpinner';
 
 export default function Inventory() {
   const { currentTenant } = useTenant();
   const [products, setProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [productToDelete, setProductToDelete] = useState<any | null>(null);
@@ -22,9 +24,11 @@ export default function Inventory() {
   }, [currentTenant]);
 
   const fetchProducts = () => {
+    setLoading(true);
     fetch(`/api/products?tenantId=${currentTenant?.id}`)
       .then(res => res.json())
-      .then(setProducts);
+      .then(setProducts)
+      .finally(() => setLoading(false));
   };
 
   const resetForm = () => {
@@ -56,6 +60,7 @@ export default function Inventory() {
 
   const confirmDelete = async () => {
     if (!productToDelete) return;
+    setLoading(true);
     try {
       const res = await fetch(`/api/products/${productToDelete.id}`, { method: 'DELETE' });
       if (res.ok) {
@@ -65,6 +70,7 @@ export default function Inventory() {
       console.error('Failed to delete product', err);
     } finally {
       setProductToDelete(null);
+      setLoading(false);
     }
   };
 
@@ -127,6 +133,7 @@ export default function Inventory() {
       variations: parsedVariations
     };
 
+    setLoading(true);
     try {
       if (editingId) {
         const res = await fetch(`/api/products/${editingId}`, {
@@ -146,11 +153,14 @@ export default function Inventory() {
       resetForm();
     } catch (err) {
       console.error('Failed to save product', err);
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleUpdateStock = async (id: number, newStock: number) => {
     if (newStock < 0) return;
+    setLoading(true);
     try {
       const res = await fetch(`/api/products/${id}/stock`, {
         method: 'PUT',
@@ -162,6 +172,8 @@ export default function Inventory() {
       }
     } catch (err) {
       console.error('Failed to update stock', err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -200,6 +212,7 @@ export default function Inventory() {
 
       {isAdding && (
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-8">
+          {loading && <LoadingSpinner />}
           <h2 className="text-lg font-semibold mb-4">{editingId ? 'Edit Product' : 'Add New Product'}</h2>
           <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4">
             <div>

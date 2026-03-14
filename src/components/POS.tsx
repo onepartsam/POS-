@@ -5,10 +5,12 @@ import ProductCard from './ProductCard';
 import Cart from './Cart';
 import { Product, CartItem } from '../types';
 import { useTenant } from '../App';
+import LoadingSpinner from './LoadingSpinner';
 
 export default function POS() {
   const { currentTenant } = useTenant();
   const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<string[]>(['All Products']);
   const [activeCategory, setActiveCategory] = useState('All Products');
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
@@ -18,13 +20,15 @@ export default function POS() {
 
   useEffect(() => {
     if (currentTenant) {
+      setLoading(true);
       fetch(`/api/products?tenantId=${currentTenant.id}`)
         .then(res => res.json())
         .then(data => {
           setProducts(data);
           const cats = Array.from(new Set(data.map((p: any) => p.category))) as string[];
           setCategories(['All Products', ...cats]);
-        });
+        })
+        .finally(() => setLoading(false));
     }
   }, [currentTenant]);
 
@@ -92,6 +96,7 @@ export default function POS() {
   const handleCheckout = async (discount: number, tax: number, total: number) => {
     if (!currentTenant || cartItems.length === 0) return;
     
+    setLoading(true);
     try {
       const res = await fetch('/api/invoices', {
         method: 'POST',
@@ -108,13 +113,17 @@ export default function POS() {
         alert('Payment successful!');
         setCartItems([]);
         // Refresh products to get updated stock
+        setLoading(true);
         fetch(`/api/products?tenantId=${currentTenant.id}`)
           .then(res => res.json())
-          .then(data => setProducts(data));
+          .then(data => setProducts(data))
+          .finally(() => setLoading(false));
       }
     } catch (err) {
       console.error(err);
       alert('Checkout failed');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -133,6 +142,7 @@ export default function POS() {
       <main className="flex-1 flex overflow-hidden relative">
         {/* Main Products Area */}
         <div className="flex-1 flex flex-col overflow-y-auto p-4 md:p-6 lg:p-8">
+          {loading && <LoadingSpinner />}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <div>
               <h2 className="text-2xl font-semibold text-gray-900">Select Products</h2>
