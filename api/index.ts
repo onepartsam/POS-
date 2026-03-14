@@ -116,6 +116,47 @@ app.put('/api/tenants/:id/settings', async (req, res) => {
   res.json({ success: true });
 });
 
+app.post('/api/tenants/:id/logo', async (req, res) => {
+  const { logo_url } = req.body;
+  console.log('Logo upload request for tenant:', req.params.id);
+  
+  if (!logo_url) {
+    console.error('No logo_url in request body');
+    return res.status(400).json({ error: 'No logo_url provided' });
+  }
+
+  // Upload to Supabase storage
+  const base64Data = logo_url.replace(/^data:image\/jpeg;base64,/, "");
+  const buffer = Buffer.from(base64Data, 'base64');
+  
+  console.log('Uploading to Supabase storage...');
+  const { data, error } = await supabase.storage
+    .from('logos')
+    .upload(`tenant-${req.params.id}.jpg`, buffer, {
+      contentType: 'image/jpeg',
+      upsert: true
+    });
+    
+  if (error) {
+    console.error('Supabase storage upload error:', error);
+    return res.status(500).json({ error: error.message });
+  }
+  
+  console.log('Upload successful, getting public URL...');
+  const { data: publicUrlData } = supabase.storage.from('logos').getPublicUrl(`tenant-${req.params.id}.jpg`);
+  
+  console.log('Updating tenant record...');
+  const { error: updateError } = await supabase.from('tenants').update({ logo_url: publicUrlData.publicUrl }).eq('id', req.params.id);
+  
+  if (updateError) {
+    console.error('Tenant update error:', updateError);
+    return res.status(500).json({ error: updateError.message });
+  }
+  
+  console.log('Logo upload complete:', publicUrlData.publicUrl);
+  res.json({ logo_url: publicUrlData.publicUrl });
+});
+
 app.delete('/api/tenants/:id', async (req, res) => {
   const tenantId = req.query.tenantId;
   if (!tenantId) return res.status(401).json({ error: 'Unauthorized' });

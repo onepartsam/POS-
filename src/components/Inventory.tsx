@@ -11,7 +11,7 @@ export default function Inventory() {
   const [productToDelete, setProductToDelete] = useState<any | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
-    name: '', price: '', category: '', image: '', stock: '',
+    name: '', sku: '', price: '', category: '', image: '', stock: '',
     variations: [] as { name: string; options: string }[]
   });
 
@@ -28,7 +28,7 @@ export default function Inventory() {
   };
 
   const resetForm = () => {
-    setFormData({ name: '', price: '', category: '', image: '', stock: '', variations: [] });
+    setFormData({ name: '', sku: '', price: '', category: '', image: '', stock: '', variations: [] });
     setIsAdding(false);
     setEditingId(null);
   };
@@ -36,6 +36,7 @@ export default function Inventory() {
   const handleEditClick = (product: any) => {
     setFormData({
       name: product.name,
+      sku: product.sku || '',
       price: product.price.toString(),
       category: product.category,
       image: product.image || '',
@@ -118,6 +119,7 @@ export default function Inventory() {
     const payload = {
       tenant_id: currentTenant.id,
       name: formData.name,
+      sku: formData.sku,
       price: parseFloat(formData.price),
       category: formData.category,
       image: formData.image || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400',
@@ -205,6 +207,10 @@ export default function Inventory() {
               <input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
             </div>
             <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">SKU</label>
+              <input required type="text" value={formData.sku} onChange={e => setFormData({...formData, sku: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+            </div>
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
               <input required type="text" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
             </div>
@@ -289,6 +295,7 @@ export default function Inventory() {
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
               <th className="px-6 py-3 text-sm font-medium text-gray-500">Product</th>
+              <th className="px-6 py-3 text-sm font-medium text-gray-500">SKU</th>
               <th className="px-6 py-3 text-sm font-medium text-gray-500">Category</th>
               <th className="px-6 py-3 text-sm font-medium text-gray-500">Price</th>
               <th className="px-6 py-3 text-sm font-medium text-gray-500">Stock</th>
@@ -311,6 +318,7 @@ export default function Inventory() {
                     </div>
                   </div>
                 </td>
+                <td className="px-6 py-4 text-sm text-gray-500">{product.sku}</td>
                 <td className="px-6 py-4 text-sm text-gray-500">{product.category}</td>
                 <td className="px-6 py-4 text-sm text-gray-900">${product.price.toFixed(2)}</td>
                 <td className="px-6 py-4 text-sm text-gray-900">
@@ -334,7 +342,7 @@ export default function Inventory() {
             ))}
             {products.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-6 py-8 text-center text-gray-500">No products found. Add some to get started.</td>
+                <td colSpan={6} className="px-6 py-8 text-center text-gray-500">No products found. Add some to get started.</td>
               </tr>
             )}
           </tbody>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutGrid, ShoppingCart, CreditCard, Truck, Database, HelpCircle, Settings, LogOut, Users, X } from 'lucide-react';
+import { LayoutGrid, ShoppingCart, CreditCard, Truck, Database, HelpCircle, Settings, LogOut, Users, X, Calculator } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useTenant } from '../App';
 
@@ -39,8 +39,8 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           </button>
         )}
         
-        <div className="w-12 h-12 mb-8 cursor-pointer relative overflow-hidden rounded-xl bg-white shadow-sm border border-gray-100">
-          <img src="/logo.png" alt="POS+ Logo" className="w-full h-full object-cover" />
+        <div className="w-12 h-12 mb-8 cursor-pointer relative overflow-hidden rounded-xl bg-white shadow-sm border border-gray-100 flex items-center justify-center">
+          <Calculator size={32} className="text-black" />
         </div>
         
         <nav className="flex-1 flex flex-col gap-6 w-full items-center">

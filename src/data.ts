@@ -3,6 +3,7 @@ import { Product } from './types';
 export const mockProducts: Product[] = [
   {
     id: '1',
+    sku: 'SKU-001',
     name: 'Cotton - Linen Long Shirt',
     price: 24.94,
     category: "Men's Wear",
@@ -13,6 +14,7 @@ export const mockProducts: Product[] = [
   },
   {
     id: '2',
+    sku: 'SKU-002',
     name: 'Straight Fit - Washed Denim',
     price: 21.93,
     category: "Men's Wear",
@@ -23,6 +25,7 @@ export const mockProducts: Product[] = [
   },
   {
     id: '3',
+    sku: 'SKU-003',
     name: 'Textured Knit Polo Shirt',
     price: 31.89,
     category: "Men's Wear",
@@ -33,6 +36,7 @@ export const mockProducts: Product[] = [
   },
   {
     id: '4',
+    sku: 'SKU-004',
     name: 'Fabric Shoulder Bag',
     price: 45.00,
     category: "Accessories",
@@ -43,6 +47,7 @@ export const mockProducts: Product[] = [
   },
   {
     id: '5',
+    sku: 'SKU-005',
     name: 'Penny Dress Loafers',
     price: 89.99,
     category: "Men's Wear",
@@ -53,6 +58,7 @@ export const mockProducts: Product[] = [
   },
   {
     id: '6',
+    sku: 'SKU-006',
     name: 'Sun Print T-Shirt',
     price: 18.50,
     category: "Men's Wear",
