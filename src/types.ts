@@ -10,6 +10,7 @@ export interface Product {
   image: string;
   category: string;
   stock: number;
+  sku?: string;
   sizes?: string[];
   colors?: string[];
   variations?: Variation[];

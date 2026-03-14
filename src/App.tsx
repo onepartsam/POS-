@@ -15,6 +15,7 @@ interface Tenant {
   name: string;
   is_super_admin?: boolean;
   tax_percentage?: number;
+  logo_url?: string;
 }
 
 interface TenantContextType {

@@ -34,7 +34,9 @@ export default function Settings() {
 
   const [storeAddress, setStoreAddress] = useState('');
   const [storeRegNumber, setStoreRegNumber] = useState('');
+  const [storeLogoUrl, setStoreLogoUrl] = useState('');
   const [isSavingStore, setIsSavingStore] = useState(false);
+  const logoInputRef = React.useRef<HTMLInputElement>(null);
 
   const [accountName, setAccountName] = useState('');
   const [accountUsername, setAccountUsername] = useState('');
@@ -47,6 +49,7 @@ export default function Settings() {
     if (currentTenant) {
       setStoreAddress(currentTenant.address || '');
       setStoreRegNumber(currentTenant.registration_number || '');
+      setStoreLogoUrl(currentTenant.logo_url || '');
       setAccountName(currentTenant.name || '');
       setAccountUsername(currentTenant.username || '');
       setAccountEmail(currentTenant.email || '');
@@ -95,6 +98,34 @@ export default function Settings() {
     }
   };
 
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const size = 320;
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          // Draw image centered and cropped to 320x320 square
+          const minDim = Math.min(img.width, img.height);
+          const sx = (img.width - minDim) / 2;
+          const sy = (img.height - minDim) / 2;
+          ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, size, size);
+          const dataUrl = canvas.toDataURL('image/webp', 0.8);
+          setStoreLogoUrl(dataUrl);
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleSaveStoreInfo = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentTenant) return;
@@ -107,7 +138,8 @@ export default function Settings() {
         body: JSON.stringify({ 
           tax_percentage: currentTenant.tax_percentage,
           address: storeAddress,
-          registration_number: storeRegNumber
+          registration_number: storeRegNumber,
+          logo_url: storeLogoUrl
         })
       });
       
@@ -115,7 +147,8 @@ export default function Settings() {
         setCurrentTenant({
           ...currentTenant,
           address: storeAddress,
-          registration_number: storeRegNumber
+          registration_number: storeRegNumber,
+          logo_url: storeLogoUrl
         });
         alert('Store information saved successfully.');
       }
@@ -383,6 +416,39 @@ export default function Settings() {
               placeholder="e.g. REG-123456789" 
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black/5 focus:outline-none"
             />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Store Logo (320x320 recommended)</label>
+            <div className="flex items-center gap-4">
+              {storeLogoUrl && (
+                <div className="w-16 h-16 rounded-lg border border-gray-200 overflow-hidden bg-gray-50">
+                  <img src={storeLogoUrl} alt="Store Logo" className="w-full h-full object-cover" />
+                </div>
+              )}
+              <input 
+                type="file" 
+                accept="image/*"
+                ref={logoInputRef}
+                onChange={handleLogoUpload}
+                className="hidden" 
+              />
+              <button 
+                type="button"
+                onClick={() => logoInputRef.current?.click()}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors text-sm font-medium"
+              >
+                {storeLogoUrl ? 'Change Logo' : 'Upload Logo'}
+              </button>
+              {storeLogoUrl && (
+                <button 
+                  type="button"
+                  onClick={() => setStoreLogoUrl('')}
+                  className="text-red-500 hover:text-red-700 text-sm font-medium"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
           </div>
           <div className="pt-2">
             <button 

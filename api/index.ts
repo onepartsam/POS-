@@ -22,14 +22,14 @@ app.get('/api/tenants', async (req, res) => {
     return res.status(403).json({ error: 'Forbidden. Super Admin access required.' });
   }
   
-  const { data: tenants } = await supabase.from('tenants').select('id, name, username, email, contact_number, tax_percentage, created_at, is_super_admin');
+  const { data: tenants } = await supabase.from('tenants').select('id, name, username, email, contact_number, tax_percentage, created_at, is_super_admin, logo_url');
   res.json(tenants);
 });
 
 app.post('/api/tenants/login', async (req, res) => {
   const { username, password } = req.body;
   const { data: tenant } = await supabase.from('tenants')
-    .select('id, name, username, email, contact_number, tax_percentage, is_super_admin')
+    .select('id, name, username, email, contact_number, tax_percentage, is_super_admin, logo_url')
     .ilike('username', username)
     .eq('password', password)
     .single();
@@ -66,7 +66,7 @@ app.post('/api/tenants', async (req, res) => {
 
   const { data: newTenant, error } = await supabase.from('tenants').insert({
     name, username, email, contact_number, address: address || null, registration_number: registration_number || null, password, is_super_admin: is_super_admin ? 1 : 0
-  }).select('id, name, username, email, contact_number, address, registration_number, tax_percentage, is_super_admin').single();
+  }).select('id, name, username, email, contact_number, address, registration_number, tax_percentage, is_super_admin, logo_url').single();
   
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ...newTenant, is_super_admin: !!newTenant.is_super_admin });
@@ -104,14 +104,14 @@ app.put('/api/tenants/:id', async (req, res) => {
 
   await supabase.from('tenants').update(updateData).eq('id', req.params.id);
   
-  const { data: updatedTenant } = await supabase.from('tenants').select('id, name, username, email, contact_number, address, registration_number, tax_percentage, is_super_admin').eq('id', req.params.id).single();
+  const { data: updatedTenant } = await supabase.from('tenants').select('id, name, username, email, contact_number, address, registration_number, tax_percentage, is_super_admin, logo_url').eq('id', req.params.id).single();
   res.json({ success: true, tenant: { ...updatedTenant, is_super_admin: !!updatedTenant?.is_super_admin } });
 });
 
 app.put('/api/tenants/:id/settings', async (req, res) => {
-  const { tax_percentage, address, registration_number } = req.body;
+  const { tax_percentage, address, registration_number, logo_url } = req.body;
   await supabase.from('tenants').update({
-    tax_percentage, address: address || null, registration_number: registration_number || null
+    tax_percentage, address: address || null, registration_number: registration_number || null, logo_url: logo_url || null
   }).eq('id', req.params.id);
   res.json({ success: true });
 });
@@ -166,9 +166,9 @@ app.get('/api/products', async (req, res) => {
 });
 
 app.post('/api/products', async (req, res) => {
-  const { tenant_id, name, price, category, image, stock, sizes, colors, variations } = req.body;
+  const { tenant_id, name, price, category, image, stock, sizes, colors, variations, sku } = req.body;
   const { data: info, error } = await supabase.from('products').insert({
-    tenant_id, name, price, category, image, stock, 
+    tenant_id, name, price, category, image, stock, sku,
     sizes: JSON.stringify(sizes || []), colors: JSON.stringify(colors || []), variations: JSON.stringify(variations || [])
   }).select('id').single();
   
@@ -177,9 +177,9 @@ app.post('/api/products', async (req, res) => {
 });
 
 app.put('/api/products/:id', async (req, res) => {
-  const { name, price, category, image, stock, sizes, colors, variations } = req.body;
+  const { name, price, category, image, stock, sizes, colors, variations, sku } = req.body;
   await supabase.from('products').update({
-    name, price, category, image, stock, 
+    name, price, category, image, stock, sku,
     sizes: JSON.stringify(sizes || []), colors: JSON.stringify(colors || []), variations: JSON.stringify(variations || [])
   }).eq('id', req.params.id);
   res.json({ success: true });
