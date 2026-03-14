@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+@media print {
+  body, html, #root {
+    height: auto !important;
+    overflow: visible !important;
+    background-color: white !important;
+  }
+  
+  /* Hide everything by default when printing */
+  body > * {
+    display: none !important;
+  }
+  
+  /* Only show the root app container */
+  #root {
+    display: block !important;
+  }
+}
