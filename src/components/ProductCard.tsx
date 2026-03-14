@@ -32,12 +32,7 @@ export default function ProductCard({ product, onAdd }: ProductCardProps) {
       </div>
       
       <div className="flex-1 flex flex-col">
-        <div className="flex justify-between items-start mb-1">
-          <h3 className="font-medium text-gray-900 text-sm line-clamp-1">{product.name}</h3>
-          {product.sku && (
-            <span className="text-[10px] font-mono text-gray-400 bg-gray-50 px-1 rounded">{product.sku}</span>
-          )}
-        </div>
+        <h3 className="font-medium text-gray-900 text-sm mb-1 line-clamp-1">{product.name}</h3>
         
         {/* Dynamic Variations */}
         {product.variations && product.variations.map(variation => (

@@ -34,9 +34,7 @@ export default function Settings() {
 
   const [storeAddress, setStoreAddress] = useState('');
   const [storeRegNumber, setStoreRegNumber] = useState('');
-  const [storeLogoUrl, setStoreLogoUrl] = useState('');
   const [isSavingStore, setIsSavingStore] = useState(false);
-  const logoInputRef = React.useRef<HTMLInputElement>(null);
 
   const [accountName, setAccountName] = useState('');
   const [accountUsername, setAccountUsername] = useState('');
@@ -49,7 +47,6 @@ export default function Settings() {
     if (currentTenant) {
       setStoreAddress(currentTenant.address || '');
       setStoreRegNumber(currentTenant.registration_number || '');
-      setStoreLogoUrl(currentTenant.logo_url || '');
       setAccountName(currentTenant.name || '');
       setAccountUsername(currentTenant.username || '');
       setAccountEmail(currentTenant.email || '');
@@ -77,8 +74,7 @@ export default function Settings() {
           password: accountPassword || undefined,
           address: currentTenant.address,
           registration_number: currentTenant.registration_number,
-          is_super_admin: currentTenant.is_super_admin,
-          logo_url: storeLogoUrl
+          is_super_admin: currentTenant.is_super_admin
         })
       });
       
@@ -99,34 +95,6 @@ export default function Settings() {
     }
   };
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const size = 320;
-        canvas.width = size;
-        canvas.height = size;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          // Draw image centered and cropped to 320x320 square
-          const minDim = Math.min(img.width, img.height);
-          const sx = (img.width - minDim) / 2;
-          const sy = (img.height - minDim) / 2;
-          ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, size, size);
-          const dataUrl = canvas.toDataURL('image/webp', 0.8);
-          setStoreLogoUrl(dataUrl);
-        }
-      };
-      img.src = event.target?.result as string;
-    };
-    reader.readAsDataURL(file);
-  };
-
   const handleSaveStoreInfo = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentTenant) return;
@@ -139,8 +107,7 @@ export default function Settings() {
         body: JSON.stringify({ 
           tax_percentage: currentTenant.tax_percentage,
           address: storeAddress,
-          registration_number: storeRegNumber,
-          logo_url: storeLogoUrl
+          registration_number: storeRegNumber
         })
       });
       
@@ -148,8 +115,7 @@ export default function Settings() {
         setCurrentTenant({
           ...currentTenant,
           address: storeAddress,
-          registration_number: storeRegNumber,
-          logo_url: storeLogoUrl
+          registration_number: storeRegNumber
         });
         alert('Store information saved successfully.');
       }
@@ -331,49 +297,6 @@ export default function Settings() {
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
         <h2 className="text-lg font-semibold mb-4">Account Settings</h2>
         <form onSubmit={handleSaveAccountInfo} className="space-y-4">
-          <div className="flex items-center gap-6 mb-6">
-            <div className="relative group">
-              <div className="w-24 h-24 rounded-2xl border-2 border-dashed border-gray-200 overflow-hidden bg-gray-50 flex items-center justify-center transition-colors group-hover:border-black/20">
-                {storeLogoUrl ? (
-                  <img src={storeLogoUrl} alt="Store Logo" className="w-full h-full object-cover" />
-                ) : (
-                  <div className="text-gray-400 flex flex-col items-center">
-                    <Plus size={24} />
-                    <span className="text-[10px] mt-1 font-medium">LOGO</span>
-                  </div>
-                )}
-              </div>
-              <input 
-                type="file" 
-                accept="image/*"
-                ref={logoInputRef}
-                onChange={handleLogoUpload}
-                className="hidden" 
-              />
-              <button 
-                type="button"
-                onClick={() => logoInputRef.current?.click()}
-                className="absolute -bottom-2 -right-2 p-2 bg-white shadow-md border border-gray-100 rounded-lg text-gray-600 hover:text-black transition-all hover:scale-110"
-                title="Upload Logo"
-              >
-                <Edit2 size={14} />
-              </button>
-            </div>
-            <div className="flex-1">
-              <h3 className="font-medium text-gray-900">Store Logo</h3>
-              <p className="text-sm text-gray-500">This logo will be displayed on your POS and invoices. Recommended size: 320x320px.</p>
-              {storeLogoUrl && (
-                <button 
-                  type="button"
-                  onClick={() => setStoreLogoUrl('')}
-                  className="text-xs text-red-500 hover:text-red-700 font-medium mt-1"
-                >
-                  Remove Logo
-                </button>
-              )}
-            </div>
-          </div>
-
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>

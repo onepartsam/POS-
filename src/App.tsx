@@ -15,7 +15,6 @@ interface Tenant {
   name: string;
   is_super_admin?: boolean;
   tax_percentage?: number;
-  logo_url?: string;
 }
 
 interface TenantContextType {
@@ -27,27 +26,8 @@ const TenantContext = createContext<TenantContextType>({ currentTenant: null, se
 export const useTenant = () => useContext(TenantContext);
 
 export default function App() {
-  const [currentTenant, setCurrentTenantState] = useState<Tenant | null>(() => {
-    const saved = localStorage.getItem('currentTenant');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        return null;
-      }
-    }
-    return null;
-  });
+  const [currentTenant, setCurrentTenant] = useState<Tenant | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
-  const setCurrentTenant = (tenant: Tenant | null) => {
-    setCurrentTenantState(tenant);
-    if (tenant) {
-      localStorage.setItem('currentTenant', JSON.stringify(tenant));
-    } else {
-      localStorage.removeItem('currentTenant');
-    }
-  };
 
   if (!currentTenant) {
     return (
