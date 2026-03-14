@@ -2,7 +2,6 @@ import React from 'react';
 import { LayoutGrid, ShoppingCart, CreditCard, Truck, Database, HelpCircle, Settings, LogOut, Users, X } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useTenant } from '../App';
-import logoImg from '../assets/logo.png';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -41,7 +40,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         )}
         
         <div className="w-12 h-12 mb-8 cursor-pointer relative overflow-hidden rounded-xl bg-white shadow-sm border border-gray-100">
-          <img src={logoImg} alt="POS+ Logo" className="w-full h-full object-cover" />
+          <img src="/logo.png" alt="POS+ Logo" className="w-full h-full object-cover" />
         </div>
         
         <nav className="flex-1 flex flex-col gap-6 w-full items-center">
