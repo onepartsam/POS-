@@ -30,7 +30,7 @@ app.get('/api/tenants', async (req, res) => {
 app.post('/api/tenants/login', async (req, res) => {
   const { username, password } = req.body;
   const { data: tenant } = await supabase.from('tenants')
-    .select('id, name, username, email, contact_number, tax_percentage, is_super_admin')
+    .select('id, name, username, email, contact_number, tax_percentage, is_super_admin, address, registration_number')
     .ilike('username', username)
     .eq('password', password)
     .single();
