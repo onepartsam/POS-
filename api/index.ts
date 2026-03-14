@@ -316,28 +316,51 @@ app.delete('/api/tenants/:id', async (req, res) => {
   const tenantId = req.query.tenantId;
   if (!tenantId) return res.status(401).json({ error: 'Unauthorized' });
   
-  const { data: requestor, error } = await supabase.from('tenants').select('is_super_admin').eq('id', tenantId).maybeSingle();
-  if (error || !requestor || !requestor.is_super_admin) {
-    return res.status(403).json({ error: 'Forbidden. Super Admin access required.' });
+  try {
+    let requestor: any = null;
+    if (supabase) {
+      const { data, error } = await supabase.from('tenants').select('is_super_admin').eq('id', tenantId).maybeSingle();
+      if (error) throw error;
+      requestor = data;
+    } else {
+      requestor = sqliteDb.prepare("SELECT is_super_admin FROM tenants WHERE id = ?").get(tenantId);
+    }
+
+    if (!requestor || !requestor.is_super_admin) {
+      return res.status(403).json({ error: 'Forbidden. Super Admin access required.' });
+    }
+    if (req.params.id === String(tenantId)) {
+      return res.status(400).json({ error: 'Cannot delete yourself' });
+    }
+    
+    // Delete tenant and associated data
+    if (supabase) {
+      const { data: invoices } = await supabase.from('invoices').select('id').eq('tenant_id', req.params.id);
+      if (invoices && invoices.length > 0) {
+        const invoiceIds = invoices.map(i => i.id);
+        await supabase.from('invoice_items').delete().in('invoice_id', invoiceIds);
+      }
+      await supabase.from('invoices').delete().eq('tenant_id', req.params.id);
+      await supabase.from('products').delete().eq('tenant_id', req.params.id);
+      await supabase.from('payment_methods').delete().eq('tenant_id', req.params.id);
+      await supabase.from('discount_codes').delete().eq('tenant_id', req.params.id);
+      await supabase.from('taxes').delete().eq('tenant_id', req.params.id);
+      await supabase.from('tenants').delete().eq('id', req.params.id);
+    } else {
+      sqliteDb.prepare("DELETE FROM invoice_items WHERE invoice_id IN (SELECT id FROM invoices WHERE tenant_id = ?)").run(req.params.id);
+      sqliteDb.prepare("DELETE FROM invoices WHERE tenant_id = ?").run(req.params.id);
+      sqliteDb.prepare("DELETE FROM products WHERE tenant_id = ?").run(req.params.id);
+      sqliteDb.prepare("DELETE FROM payment_methods WHERE tenant_id = ?").run(req.params.id);
+      sqliteDb.prepare("DELETE FROM discount_codes WHERE tenant_id = ?").run(req.params.id);
+      sqliteDb.prepare("DELETE FROM taxes WHERE tenant_id = ?").run(req.params.id);
+      sqliteDb.prepare("DELETE FROM tenants WHERE id = ?").run(req.params.id);
+    }
+    
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('Delete tenant error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
   }
-  if (req.params.id === String(tenantId)) {
-    return res.status(400).json({ error: 'Cannot delete yourself' });
-  }
-  
-  // Delete tenant and associated data
-  const { data: invoices } = await supabase.from('invoices').select('id').eq('tenant_id', req.params.id);
-  if (invoices && invoices.length > 0) {
-    const invoiceIds = invoices.map(i => i.id);
-    await supabase.from('invoice_items').delete().in('invoice_id', invoiceIds);
-  }
-  await supabase.from('invoices').delete().eq('tenant_id', req.params.id);
-  await supabase.from('products').delete().eq('tenant_id', req.params.id);
-  await supabase.from('payment_methods').delete().eq('tenant_id', req.params.id);
-  await supabase.from('discount_codes').delete().eq('tenant_id', req.params.id);
-  await supabase.from('taxes').delete().eq('tenant_id', req.params.id);
-  await supabase.from('tenants').delete().eq('id', req.params.id);
-  
-  res.json({ success: true });
 });
 
 // Products
@@ -345,51 +368,115 @@ app.get('/api/products', async (req, res) => {
   const tenantId = req.query.tenantId;
   if (!tenantId) return res.status(400).json({ error: 'tenantId is required' });
   
-  const { data: products } = await supabase.from('products').select('*').eq('tenant_id', tenantId);
-  
-  res.json((products || []).map((p: any) => {
-    const sizes = typeof p.sizes === 'string' ? JSON.parse(p.sizes) : (p.sizes || []);
-    const colors = typeof p.colors === 'string' ? JSON.parse(p.colors) : (p.colors || []);
-    let variations = typeof p.variations === 'string' ? JSON.parse(p.variations) : (p.variations || []);
-    
-    if (variations.length === 0) {
-      if (sizes.length > 0) variations.push({ name: 'Size', options: sizes });
-      if (colors.length > 0) variations.push({ name: 'Color', options: colors });
+  try {
+    let products: any[] = [];
+    if (supabase) {
+      const { data } = await supabase.from('products').select('*').eq('tenant_id', tenantId);
+      products = data || [];
+    } else {
+      products = sqliteDb.prepare("SELECT * FROM products WHERE tenant_id = ?").all(tenantId);
     }
+    
+    res.json(products.map((p: any) => {
+      const sizes = typeof p.sizes === 'string' ? JSON.parse(p.sizes) : (p.sizes || []);
+      const colors = typeof p.colors === 'string' ? JSON.parse(p.colors) : (p.colors || []);
+      let variations = typeof p.variations === 'string' ? JSON.parse(p.variations) : (p.variations || []);
+      
+      if (variations.length === 0) {
+        if (sizes.length > 0) variations.push({ name: 'Size', options: sizes });
+        if (colors.length > 0) variations.push({ name: 'Color', options: colors });
+      }
 
-    return { ...p, sizes, colors, variations };
-  }));
+      return { ...p, sizes, colors, variations };
+    }));
+  } catch (err: any) {
+    console.error('Fetch products error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 app.post('/api/products', async (req, res) => {
   const { tenant_id, name, price, category, image, stock, sizes, colors, variations, sku } = req.body;
-  const { data: info, error } = await supabase.from('products').insert({
-    tenant_id, name, price, category, image, stock, sku,
-    sizes: JSON.stringify(sizes || []), colors: JSON.stringify(colors || []), variations: JSON.stringify(variations || [])
-  }).select('id').single();
-  
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ id: info.id });
+  try {
+    let productId: any = null;
+    if (supabase) {
+      const { data, error } = await supabase.from('products').insert({
+        tenant_id, name, price, category, image, stock, sku,
+        sizes: JSON.stringify(sizes || []), colors: JSON.stringify(colors || []), variations: JSON.stringify(variations || [])
+      }).select('id').single();
+      
+      if (error) throw error;
+      productId = data.id;
+    } else {
+      const result = sqliteDb.prepare(`
+        INSERT INTO products (tenant_id, name, price, category, image, stock, sku, sizes, colors, variations)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        tenant_id, name, price, category, image, stock, sku,
+        JSON.stringify(sizes || []), JSON.stringify(colors || []), JSON.stringify(variations || [])
+      );
+      productId = result.lastInsertRowid;
+    }
+    res.json({ id: productId });
+  } catch (err: any) {
+    console.error('Create product error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 app.put('/api/products/:id', async (req, res) => {
   const { name, price, category, image, stock, sizes, colors, variations, sku } = req.body;
-  await supabase.from('products').update({
-    name, price, category, image, stock, sku,
-    sizes: JSON.stringify(sizes || []), colors: JSON.stringify(colors || []), variations: JSON.stringify(variations || [])
-  }).eq('id', req.params.id);
-  res.json({ success: true });
+  try {
+    if (supabase) {
+      await supabase.from('products').update({
+        name, price, category, image, stock, sku,
+        sizes: JSON.stringify(sizes || []), colors: JSON.stringify(colors || []), variations: JSON.stringify(variations || [])
+      }).eq('id', req.params.id);
+    } else {
+      sqliteDb.prepare(`
+        UPDATE products 
+        SET name = ?, price = ?, category = ?, image = ?, stock = ?, sku = ?, sizes = ?, colors = ?, variations = ?
+        WHERE id = ?
+      `).run(
+        name, price, category, image, stock, sku,
+        JSON.stringify(sizes || []), JSON.stringify(colors || []), JSON.stringify(variations || []),
+        req.params.id
+      );
+    }
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('Update product error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 app.delete('/api/products/:id', async (req, res) => {
-  await supabase.from('products').delete().eq('id', req.params.id);
-  res.json({ success: true });
+  try {
+    if (supabase) {
+      await supabase.from('products').delete().eq('id', req.params.id);
+    } else {
+      sqliteDb.prepare("DELETE FROM products WHERE id = ?").run(req.params.id);
+    }
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('Delete product error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 app.put('/api/products/:id/stock', async (req, res) => {
   const { stock } = req.body;
-  await supabase.from('products').update({ stock }).eq('id', req.params.id);
-  res.json({ success: true });
+  try {
+    if (supabase) {
+      await supabase.from('products').update({ stock }).eq('id', req.params.id);
+    } else {
+      sqliteDb.prepare("UPDATE products SET stock = ? WHERE id = ?").run(stock, req.params.id);
+    }
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('Update stock error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // Invoices
@@ -397,26 +484,58 @@ app.get('/api/invoices', async (req, res) => {
   const tenantId = req.query.tenantId;
   if (!tenantId) return res.status(400).json({ error: 'tenantId is required' });
   
-  const { data: invoices } = await supabase.from('invoices').select('*').eq('tenant_id', tenantId).order('created_at', { ascending: false });
-  res.json(invoices || []);
+  try {
+    let invoices: any[] = [];
+    if (supabase) {
+      const { data } = await supabase.from('invoices').select('*').eq('tenant_id', tenantId).order('created_at', { ascending: false });
+      invoices = data || [];
+    } else {
+      invoices = sqliteDb.prepare("SELECT * FROM invoices WHERE tenant_id = ? ORDER BY created_at DESC").all(tenantId);
+    }
+    res.json(invoices);
+  } catch (err: any) {
+    console.error('Fetch invoices error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 app.get('/api/invoices/:id', async (req, res) => {
   const invoiceId = req.params.id;
-  const { data: invoice } = await supabase.from('invoices').select('*').eq('id', invoiceId).single();
-  if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
-  
-  const { data: items } = await supabase.from('invoice_items').select(`
-    *,
-    products!inner(name)
-  `).eq('invoice_id', invoiceId);
-  
-  const formattedItems = (items || []).map((item: any) => ({
-    ...item,
-    product_name: item.products?.name
-  }));
-  
-  res.json({ ...invoice, items: formattedItems });
+  try {
+    let invoice: any = null;
+    let items: any[] = [];
+
+    if (supabase) {
+      const { data } = await supabase.from('invoices').select('*').eq('id', invoiceId).single();
+      invoice = data;
+      if (invoice) {
+        const { data: itemsData } = await supabase.from('invoice_items').select(`
+          *,
+          products!inner(name)
+        `).eq('invoice_id', invoiceId);
+        items = (itemsData || []).map((item: any) => ({
+          ...item,
+          product_name: item.products?.name
+        }));
+      }
+    } else {
+      invoice = sqliteDb.prepare("SELECT * FROM invoices WHERE id = ?").get(invoiceId);
+      if (invoice) {
+        items = sqliteDb.prepare(`
+          SELECT ii.*, p.name as product_name 
+          FROM invoice_items ii
+          JOIN products p ON ii.product_id = p.id
+          WHERE ii.invoice_id = ?
+        `).all(invoiceId);
+      }
+    }
+
+    if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
+    res.json({ ...invoice, items });
+  } catch (err: any) {
+    console.error('Fetch invoice details error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 app.put('/api/invoices/:id/status', async (req, res) => {
@@ -427,116 +546,298 @@ app.put('/api/invoices/:id/status', async (req, res) => {
     return res.status(400).json({ error: 'Invalid status' });
   }
 
-  const { error } = await supabase.from('invoices').update({ status }).eq('id', invoiceId);
-  if (error) return res.status(500).json({ error: 'Failed to update status' });
-  res.json({ success: true });
+  try {
+    if (supabase) {
+      const { error } = await supabase.from('invoices').update({ status }).eq('id', invoiceId);
+      if (error) throw error;
+    } else {
+      sqliteDb.prepare("UPDATE invoices SET status = ? WHERE id = ?").run(status, invoiceId);
+    }
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('Update invoice status error:', err.message);
+    res.status(500).json({ error: 'Failed to update status' });
+  }
 });
 
 app.post('/api/invoices', async (req, res) => {
   const { tenant_id, total, tax, discount, items, status = 'Completed' } = req.body;
   
-  const { data: invoice, error: invoiceError } = await supabase.from('invoices').insert({
-    tenant_id, total, tax, discount, status
-  }).select('id').single();
-  
-  if (invoiceError || !invoice) return res.status(500).json({ error: 'Failed to create invoice' });
-  
-  const invoiceId = invoice.id;
-  
-  for (const item of items) {
-    await supabase.from('invoice_items').insert({
-      invoice_id: invoiceId, product_id: item.id, quantity: item.quantity, price: item.price, 
-      size: item.selectedSize || null, color: item.selectedColor || null, 
-      variations: item.selectedVariations ? JSON.stringify(item.selectedVariations) : null
-    });
-    
-    // Update stock
-    const { data: product } = await supabase.from('products').select('stock').eq('id', item.id).single();
-    if (product) {
-      await supabase.from('products').update({ stock: product.stock - item.quantity }).eq('id', item.id);
+  try {
+    let invoiceId: any = null;
+    if (supabase) {
+      const { data: invoice, error: invoiceError } = await supabase.from('invoices').insert({
+        tenant_id, total, tax, discount, status
+      }).select('id').single();
+      
+      if (invoiceError || !invoice) throw invoiceError || new Error('Failed to create invoice');
+      invoiceId = invoice.id;
+      
+      for (const item of items) {
+        await supabase.from('invoice_items').insert({
+          invoice_id: invoiceId, product_id: item.id, quantity: item.quantity, price: item.price, 
+          size: item.selectedSize || null, color: item.selectedColor || null, 
+          variations: item.selectedVariations ? JSON.stringify(item.selectedVariations) : null
+        });
+        
+        const { data: product } = await supabase.from('products').select('stock').eq('id', item.id).single();
+        if (product) {
+          await supabase.from('products').update({ stock: product.stock - item.quantity }).eq('id', item.id);
+        }
+      }
+    } else {
+      const transaction = sqliteDb.transaction(() => {
+        const result = sqliteDb.prepare(`
+          INSERT INTO invoices (tenant_id, total, tax, discount, status)
+          VALUES (?, ?, ?, ?, ?)
+        `).run(tenant_id, total, tax, discount, status);
+        
+        const newInvoiceId = result.lastInsertRowid;
+        
+        for (const item of items) {
+          sqliteDb.prepare(`
+            INSERT INTO invoice_items (invoice_id, product_id, quantity, price, size, color, variations)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            newInvoiceId, item.id, item.quantity, item.price, 
+            item.selectedSize || null, item.selectedColor || null, 
+            item.selectedVariations ? JSON.stringify(item.selectedVariations) : null
+          );
+          
+          sqliteDb.prepare("UPDATE products SET stock = stock - ? WHERE id = ?").run(item.quantity, item.id);
+        }
+        return newInvoiceId;
+      });
+      invoiceId = transaction();
     }
+    res.json({ success: true, id: invoiceId });
+  } catch (err: any) {
+    console.error('Create invoice error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
   }
-  
-  res.json({ id: invoiceId });
 });
 
 // Payment Methods
 app.get('/api/payment-methods', async (req, res) => {
   const tenantId = req.query.tenantId;
   if (!tenantId) return res.status(400).json({ error: 'tenantId is required' });
-  const { data: methods } = await supabase.from('payment_methods').select('*').eq('tenant_id', tenantId);
-  res.json(methods || []);
+  
+  try {
+    let methods: any[] = [];
+    if (supabase) {
+      const { data } = await supabase.from('payment_methods').select('*').eq('tenant_id', tenantId);
+      methods = data || [];
+    } else {
+      methods = sqliteDb.prepare("SELECT * FROM payment_methods WHERE tenant_id = ?").all(tenantId);
+    }
+    res.json(methods);
+  } catch (err: any) {
+    console.error('Fetch payment methods error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 app.post('/api/payment-methods', async (req, res) => {
   const { tenant_id, name } = req.body;
-  const { data: info } = await supabase.from('payment_methods').insert({ tenant_id, name }).select('id').single();
-  res.json({ id: info?.id, name });
+  try {
+    let methodId: any = null;
+    if (supabase) {
+      const { data, error } = await supabase.from('payment_methods').insert({ tenant_id, name }).select('id').single();
+      if (error) throw error;
+      methodId = data.id;
+    } else {
+      const result = sqliteDb.prepare("INSERT INTO payment_methods (tenant_id, name) VALUES (?, ?)").run(tenant_id, name);
+      methodId = result.lastInsertRowid;
+    }
+    res.json({ id: methodId, name });
+  } catch (err: any) {
+    console.error('Create payment method error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 app.put('/api/payment-methods/:id', async (req, res) => {
   const { name } = req.body;
-  await supabase.from('payment_methods').update({ name }).eq('id', req.params.id);
-  res.json({ success: true });
+  try {
+    if (supabase) {
+      await supabase.from('payment_methods').update({ name }).eq('id', req.params.id);
+    } else {
+      sqliteDb.prepare("UPDATE payment_methods SET name = ? WHERE id = ?").run(name, req.params.id);
+    }
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('Update payment method error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 app.delete('/api/payment-methods/:id', async (req, res) => {
-  await supabase.from('payment_methods').delete().eq('id', req.params.id);
-  res.json({ success: true });
+  try {
+    if (supabase) {
+      await supabase.from('payment_methods').delete().eq('id', req.params.id);
+    } else {
+      sqliteDb.prepare("DELETE FROM payment_methods WHERE id = ?").run(req.params.id);
+    }
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('Delete payment method error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // Discount Codes
 app.get('/api/discount-codes', async (req, res) => {
   const tenantId = req.query.tenantId;
   if (!tenantId) return res.status(400).json({ error: 'tenantId is required' });
-  const { data: codes } = await supabase.from('discount_codes').select('*').eq('tenant_id', tenantId);
-  res.json(codes || []);
+  
+  try {
+    let codes: any[] = [];
+    if (supabase) {
+      const { data } = await supabase.from('discount_codes').select('*').eq('tenant_id', tenantId);
+      codes = data || [];
+    } else {
+      codes = sqliteDb.prepare("SELECT * FROM discount_codes WHERE tenant_id = ?").all(tenantId);
+    }
+    res.json(codes);
+  } catch (err: any) {
+    console.error('Fetch discount codes error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 app.post('/api/discount-codes', async (req, res) => {
   const { tenant_id, code, discount_type, discount_value, min_spending } = req.body;
-  const { data: info } = await supabase.from('discount_codes').insert({
-    tenant_id, code, discount_percentage: discount_value, discount_type: discount_type || 'percent', discount_value, min_spending: min_spending || 0
-  }).select('id').single();
-  res.json({ id: info?.id, code, discount_type: discount_type || 'percent', discount_value, min_spending: min_spending || 0 });
+  try {
+    let codeId: any = null;
+    const type = discount_type || 'percent';
+    const value = discount_value || 0;
+    const min = min_spending || 0;
+
+    if (supabase) {
+      const { data, error } = await supabase.from('discount_codes').insert({
+        tenant_id, code, discount_percentage: value, discount_type: type, discount_value: value, min_spending: min
+      }).select('id').single();
+      if (error) throw error;
+      codeId = data.id;
+    } else {
+      const result = sqliteDb.prepare(`
+        INSERT INTO discount_codes (tenant_id, code, discount_type, discount_value, discount_percentage, min_spending)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(tenant_id, code, type, value, value, min);
+      codeId = result.lastInsertRowid;
+    }
+    res.json({ id: codeId, code, discount_type: type, discount_value: value, min_spending: min });
+  } catch (err: any) {
+    console.error('Create discount code error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 app.put('/api/discount-codes/:id', async (req, res) => {
   const { code, discount_type, discount_value, min_spending } = req.body;
-  await supabase.from('discount_codes').update({
-    code, discount_type: discount_type || 'percent', discount_value, min_spending: min_spending || 0
-  }).eq('id', req.params.id);
-  res.json({ success: true });
+  try {
+    const type = discount_type || 'percent';
+    const value = discount_value || 0;
+    const min = min_spending || 0;
+
+    if (supabase) {
+      await supabase.from('discount_codes').update({
+        code, discount_type: type, discount_value: value, min_spending: min
+      }).eq('id', req.params.id);
+    } else {
+      sqliteDb.prepare(`
+        UPDATE discount_codes 
+        SET code = ?, discount_type = ?, discount_value = ?, discount_percentage = ?, min_spending = ?
+        WHERE id = ?
+      `).run(code, type, value, value, min, req.params.id);
+    }
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('Update discount code error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 app.delete('/api/discount-codes/:id', async (req, res) => {
-  await supabase.from('discount_codes').delete().eq('id', req.params.id);
-  res.json({ success: true });
+  try {
+    if (supabase) {
+      await supabase.from('discount_codes').delete().eq('id', req.params.id);
+    } else {
+      sqliteDb.prepare("DELETE FROM discount_codes WHERE id = ?").run(req.params.id);
+    }
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('Delete discount code error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // Taxes
 app.get('/api/taxes', async (req, res) => {
   const tenantId = req.query.tenantId;
   if (!tenantId) return res.status(400).json({ error: 'tenantId is required' });
-  const { data: taxes } = await supabase.from('taxes').select('*').eq('tenant_id', tenantId);
-  res.json(taxes || []);
+  
+  try {
+    let taxes: any[] = [];
+    if (supabase) {
+      const { data } = await supabase.from('taxes').select('*').eq('tenant_id', tenantId);
+      taxes = data || [];
+    } else {
+      taxes = sqliteDb.prepare("SELECT * FROM taxes WHERE tenant_id = ?").all(tenantId);
+    }
+    res.json(taxes);
+  } catch (err: any) {
+    console.error('Fetch taxes error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 app.post('/api/taxes', async (req, res) => {
   const { tenant_id, name, percentage } = req.body;
-  const { data: info } = await supabase.from('taxes').insert({ tenant_id, name, percentage }).select('id').single();
-  res.json({ id: info?.id, name, percentage });
+  try {
+    let taxId: any = null;
+    if (supabase) {
+      const { data, error } = await supabase.from('taxes').insert({ tenant_id, name, percentage }).select('id').single();
+      if (error) throw error;
+      taxId = data.id;
+    } else {
+      const result = sqliteDb.prepare("INSERT INTO taxes (tenant_id, name, percentage) VALUES (?, ?, ?)").run(tenant_id, name, percentage);
+      taxId = result.lastInsertRowid;
+    }
+    res.json({ id: taxId, name, percentage });
+  } catch (err: any) {
+    console.error('Create tax error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 app.put('/api/taxes/:id', async (req, res) => {
   const { name, percentage } = req.body;
-  await supabase.from('taxes').update({ name, percentage }).eq('id', req.params.id);
-  res.json({ success: true });
+  try {
+    if (supabase) {
+      await supabase.from('taxes').update({ name, percentage }).eq('id', req.params.id);
+    } else {
+      sqliteDb.prepare("UPDATE taxes SET name = ?, percentage = ? WHERE id = ?").run(name, percentage, req.params.id);
+    }
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('Update tax error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 app.delete('/api/taxes/:id', async (req, res) => {
-  await supabase.from('taxes').delete().eq('id', req.params.id);
-  res.json({ success: true });
+  try {
+    if (supabase) {
+      await supabase.from('taxes').delete().eq('id', req.params.id);
+    } else {
+      sqliteDb.prepare("DELETE FROM taxes WHERE id = ?").run(req.params.id);
+    }
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('Delete tax error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 export default app;
