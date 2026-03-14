@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTenant } from '../App';
-import { Eye, Printer, X } from 'lucide-react';
+import { Eye, Printer, X, Mail } from 'lucide-react';
 
 export default function Invoices() {
   const { currentTenant } = useTenant();
@@ -155,6 +155,7 @@ export default function Invoices() {
                   onClick={handleEmail}
                   className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-2"
                 >
+                  <Mail size={20} />
                   <span className="text-sm font-medium">Email</span>
                 </button>
                 <button 
