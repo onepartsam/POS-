@@ -244,6 +244,7 @@ app.post('/api/invoices/:id/email', async (req, res) => {
   const { data: invoice } = await supabase.from('invoices').select('*').eq('id', invoiceId).single();
   if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
 
+  const { data: tenant } = await supabase.from('tenants').select('*').eq('id', invoice.tenant_id).single();
   const { data: items } = await supabase.from('invoice_items').select(`
     *,
     products!inner(name)
@@ -259,21 +260,35 @@ app.post('/api/invoices/:id/email', async (req, res) => {
   `).join('');
 
   const htmlBody = `
-    <h1>Invoice #${invoiceId.toString().padStart(5, '0')}</h1>
-    <table style="width: 100%; border-collapse: collapse;">
-      <thead>
-        <tr style="background-color: #f2f2f2;">
-          <th style="border: 1px solid #ddd; padding: 8px;">Product</th>
-          <th style="border: 1px solid #ddd; padding: 8px;">Quantity</th>
-          <th style="border: 1px solid #ddd; padding: 8px;">Price</th>
-          <th style="border: 1px solid #ddd; padding: 8px;">Total</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${tableRows}
-      </tbody>
-    </table>
-    <p><strong>Total: $${invoice.total.toFixed(2)}</strong></p>
+    <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #eee;">
+      <h1 style="color: #333;">Invoice #${invoiceId.toString().padStart(5, '0')}</h1>
+      <p><strong>Date:</strong> ${new Date(invoice.created_at).toLocaleDateString()}</p>
+      <div style="margin-bottom: 20px;">
+        <h3>From:</h3>
+        <p>${tenant?.name || 'Company Name'}<br>
+        ${tenant?.address || ''}<br>
+        Reg: ${tenant?.registration_number || ''}</p>
+      </div>
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+        <thead>
+          <tr style="background-color: #f2f2f2;">
+            <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Product</th>
+            <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Qty</th>
+            <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Price</th>
+            <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${tableRows}
+        </tbody>
+      </table>
+      <div style="text-align: right;">
+        <p><strong>Subtotal:</strong> $${(invoice.total - (invoice.tax || 0) + (invoice.discount || 0)).toFixed(2)}</p>
+        <p><strong>Tax:</strong> $${(invoice.tax || 0).toFixed(2)}</p>
+        <p><strong>Discount:</strong> -$${(invoice.discount || 0).toFixed(2)}</p>
+        <p style="font-size: 1.2em;"><strong>Total: $${invoice.total.toFixed(2)}</strong></p>
+      </div>
+    </div>
   `;
 
   const transporter = nodemailer.createTransport({
