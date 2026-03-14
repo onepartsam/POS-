@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutGrid, ShoppingCart, CreditCard, Truck, Database, HelpCircle, Settings, LogOut, Users, X, Calculator } from 'lucide-react';
+import { LayoutGrid, ShoppingCart, CreditCard, Truck, Database, HelpCircle, Settings, LogOut, Users, X, Calculator, Tag } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useTenant } from '../App';
 
@@ -46,6 +46,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         <nav className="flex-1 flex flex-col gap-6 w-full items-center">
           <NavItem to="/" icon={<ShoppingCart size={22} />} active={location.pathname === '/'} onClick={onClose} />
           <NavItem to="/inventory" icon={<Database size={22} />} active={location.pathname === '/inventory'} onClick={onClose} />
+          <NavItem to="/categories" icon={<Tag size={22} />} active={location.pathname === '/categories'} onClick={onClose} />
           <NavItem to="/invoices" icon={<CreditCard size={22} />} active={location.pathname === '/invoices'} onClick={onClose} />
           {currentTenant?.is_super_admin && (
             <NavItem to="/admin" icon={<Users size={22} />} active={location.pathname === '/admin'} onClick={onClose} />

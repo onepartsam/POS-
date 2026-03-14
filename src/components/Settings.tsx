@@ -145,6 +145,59 @@ export default function Settings() {
     setDiscountCodes(data);
   };
 
+  const handleAddDiscountCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDiscountCode || !newDiscountValue) return;
+    const res = await fetch('/api/discount-codes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        tenant_id: currentTenant?.id, 
+        code: newDiscountCode, 
+        discount_type: newDiscountType,
+        discount_value: parseFloat(newDiscountValue),
+        min_spending: parseFloat(newDiscountMinSpending) || 0
+      })
+    });
+    if (res.ok) {
+      setNewDiscountCode('');
+      setNewDiscountValue('');
+      setNewDiscountMinSpending('0');
+      fetchDiscountCodes();
+    }
+  };
+
+  const handleDeleteDiscountCode = async (id: number) => {
+    const res = await fetch(`/api/discount-codes/${id}`, { method: 'DELETE' });
+    if (res.ok) fetchDiscountCodes();
+  };
+
+  const handleEditDiscountCodeClick = (code: any) => {
+    setEditingDiscountCodeId(code.id);
+    setEditDiscountCode(code.code);
+    setEditDiscountType(code.discount_type);
+    setEditDiscountValue(code.discount_value.toString());
+    setEditDiscountMinSpending(code.min_spending.toString());
+  };
+
+  const handleSaveEditDiscountCode = async (id: number) => {
+    if (!editDiscountCode || !editDiscountValue) return;
+    const res = await fetch(`/api/discount-codes/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        code: editDiscountCode, 
+        discount_type: editDiscountType,
+        discount_value: parseFloat(editDiscountValue),
+        min_spending: parseFloat(editDiscountMinSpending) || 0
+      })
+    });
+    if (res.ok) {
+      setEditingDiscountCodeId(null);
+      fetchDiscountCodes();
+    }
+  };
+
   const handleAddTax = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTaxName || !newTaxPercentage) return;
@@ -218,59 +271,6 @@ export default function Settings() {
     if (res.ok) {
       setEditingPaymentMethodId(null);
       fetchPaymentMethods();
-    }
-  };
-
-  const handleAddDiscountCode = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newDiscountCode || !newDiscountValue) return;
-    const res = await fetch('/api/discount-codes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        tenant_id: currentTenant?.id, 
-        code: newDiscountCode, 
-        discount_type: newDiscountType,
-        discount_value: parseFloat(newDiscountValue),
-        min_spending: parseFloat(newDiscountMinSpending) || 0
-      })
-    });
-    if (res.ok) {
-      setNewDiscountCode('');
-      setNewDiscountValue('');
-      setNewDiscountMinSpending('0');
-      fetchDiscountCodes();
-    }
-  };
-
-  const handleDeleteDiscountCode = async (id: number) => {
-    const res = await fetch(`/api/discount-codes/${id}`, { method: 'DELETE' });
-    if (res.ok) fetchDiscountCodes();
-  };
-
-  const handleEditDiscountCodeClick = (code: any) => {
-    setEditingDiscountCodeId(code.id);
-    setEditDiscountCode(code.code);
-    setEditDiscountType(code.discount_type);
-    setEditDiscountValue(code.discount_value.toString());
-    setEditDiscountMinSpending(code.min_spending.toString());
-  };
-
-  const handleSaveEditDiscountCode = async (id: number) => {
-    if (!editDiscountCode || !editDiscountValue) return;
-    const res = await fetch(`/api/discount-codes/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        code: editDiscountCode, 
-        discount_type: editDiscountType,
-        discount_value: parseFloat(editDiscountValue),
-        min_spending: parseFloat(editDiscountMinSpending) || 0
-      })
-    });
-    if (res.ok) {
-      setEditingDiscountCodeId(null);
-      fetchDiscountCodes();
     }
   };
 

@@ -7,6 +7,7 @@ import LoadingSpinner from './LoadingSpinner';
 export default function Inventory() {
   const { currentTenant } = useTenant();
   const [products, setProducts] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -20,6 +21,7 @@ export default function Inventory() {
   useEffect(() => {
     if (currentTenant) {
       fetchProducts();
+      fetchCategories();
     }
   }, [currentTenant]);
 
@@ -29,6 +31,12 @@ export default function Inventory() {
       .then(res => res.json())
       .then(setProducts)
       .finally(() => setLoading(false));
+  };
+
+  const fetchCategories = () => {
+    fetch(`/api/categories?tenantId=${currentTenant?.id}`)
+      .then(res => res.json())
+      .then(setCategories);
   };
 
   const resetForm = () => {
@@ -221,11 +229,16 @@ export default function Inventory() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">SKU</label>
-              <input required type="text" value={formData.sku} onChange={e => setFormData({...formData, sku: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+              <input type="text" value={formData.sku} onChange={e => setFormData({...formData, sku: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-              <input required type="text" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+              <select required value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full px-3 py-2 border rounded-lg">
+                <option value="">Select a category</option>
+                {categories.map(cat => (
+                  <option key={cat.id} value={cat.name}>{cat.name}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Price ($)</label>
@@ -331,7 +344,7 @@ export default function Inventory() {
                     </div>
                   </div>
                 </td>
-                <td className="px-6 py-4 text-sm text-gray-500">{product.sku}</td>
+                <td className="px-6 py-4 text-sm text-gray-500">{product.sku || '-'}</td>
                 <td className="px-6 py-4 text-sm text-gray-500">{product.category}</td>
                 <td className="px-6 py-4 text-sm text-gray-900">${product.price.toFixed(2)}</td>
                 <td className="px-6 py-4 text-sm text-gray-900">

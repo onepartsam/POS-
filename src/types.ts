@@ -3,6 +3,12 @@ export interface Variation {
   options: string[];
 }
 
+export interface Category {
+  id: number;
+  tenant_id: number;
+  name: string;
+}
+
 export interface Product {
   id: string;
   sku: string;

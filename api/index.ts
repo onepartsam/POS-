@@ -116,47 +116,6 @@ app.put('/api/tenants/:id/settings', async (req, res) => {
   res.json({ success: true });
 });
 
-app.post('/api/tenants/:id/logo', async (req, res) => {
-  const { logo_url } = req.body;
-  console.log('Logo upload request for tenant:', req.params.id);
-  
-  if (!logo_url) {
-    console.error('No logo_url in request body');
-    return res.status(400).json({ error: 'No logo_url provided' });
-  }
-
-  // Upload to Supabase storage
-  const base64Data = logo_url.replace(/^data:image\/jpeg;base64,/, "");
-  const buffer = Buffer.from(base64Data, 'base64');
-  
-  console.log('Uploading to Supabase storage...');
-  const { data, error } = await supabase.storage
-    .from('logos')
-    .upload(`tenant-${req.params.id}.jpg`, buffer, {
-      contentType: 'image/jpeg',
-      upsert: true
-    });
-    
-  if (error) {
-    console.error('Supabase storage upload error:', error);
-    return res.status(500).json({ error: error.message });
-  }
-  
-  console.log('Upload successful, getting public URL...');
-  const { data: publicUrlData } = supabase.storage.from('logos').getPublicUrl(`tenant-${req.params.id}.jpg`);
-  
-  console.log('Updating tenant record...');
-  const { error: updateError } = await supabase.from('tenants').update({ logo_url: publicUrlData.publicUrl }).eq('id', req.params.id);
-  
-  if (updateError) {
-    console.error('Tenant update error:', updateError);
-    return res.status(500).json({ error: updateError.message });
-  }
-  
-  console.log('Logo upload complete:', publicUrlData.publicUrl);
-  res.json({ logo_url: publicUrlData.publicUrl });
-});
-
 app.delete('/api/tenants/:id', async (req, res) => {
   const tenantId = req.query.tenantId;
   if (!tenantId) return res.status(401).json({ error: 'Unauthorized' });
@@ -207,9 +166,9 @@ app.get('/api/products', async (req, res) => {
 });
 
 app.post('/api/products', async (req, res) => {
-  const { tenant_id, name, price, category, image, stock, sizes, colors, variations } = req.body;
+  const { tenant_id, name, sku, price, category, image, stock, sizes, colors, variations } = req.body;
   const { data: info, error } = await supabase.from('products').insert({
-    tenant_id, name, price, category, image, stock, 
+    tenant_id, name, sku, price, category, image, stock, 
     sizes: JSON.stringify(sizes || []), colors: JSON.stringify(colors || []), variations: JSON.stringify(variations || [])
   }).select('id').single();
   
@@ -218,9 +177,9 @@ app.post('/api/products', async (req, res) => {
 });
 
 app.put('/api/products/:id', async (req, res) => {
-  const { name, price, category, image, stock, sizes, colors, variations } = req.body;
+  const { name, sku, price, category, image, stock, sizes, colors, variations } = req.body;
   await supabase.from('products').update({
-    name, price, category, image, stock, 
+    name, sku, price, category, image, stock, 
     sizes: JSON.stringify(sizes || []), colors: JSON.stringify(colors || []), variations: JSON.stringify(variations || [])
   }).eq('id', req.params.id);
   res.json({ success: true });
@@ -381,6 +340,31 @@ app.put('/api/taxes/:id', async (req, res) => {
 
 app.delete('/api/taxes/:id', async (req, res) => {
   await supabase.from('taxes').delete().eq('id', req.params.id);
+  res.json({ success: true });
+});
+
+// Categories
+app.get('/api/categories', async (req, res) => {
+  const tenantId = req.query.tenantId;
+  if (!tenantId) return res.status(400).json({ error: 'tenantId is required' });
+  const { data: categories } = await supabase.from('categories').select('*').eq('tenant_id', tenantId);
+  res.json(categories || []);
+});
+
+app.post('/api/categories', async (req, res) => {
+  const { tenant_id, name } = req.body;
+  const { data: info } = await supabase.from('categories').insert({ tenant_id, name }).select('id').single();
+  res.json({ id: info?.id, name });
+});
+
+app.put('/api/categories/:id', async (req, res) => {
+  const { name } = req.body;
+  await supabase.from('categories').update({ name }).eq('id', req.params.id);
+  res.json({ success: true });
+});
+
+app.delete('/api/categories/:id', async (req, res) => {
+  await supabase.from('categories').delete().eq('id', req.params.id);
   res.json({ success: true });
 });
 

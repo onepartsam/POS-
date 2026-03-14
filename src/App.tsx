@@ -5,6 +5,7 @@ import POS from './components/POS';
 import AdminPanel from './components/AdminPanel';
 import Inventory from './components/Inventory';
 import Invoices from './components/Invoices';
+import Categories from './components/Categories';
 import Settings from './components/Settings';
 import Auth from './components/Auth';
 import Manual from './components/Manual';
@@ -15,12 +16,6 @@ interface Tenant {
   name: string;
   is_super_admin?: boolean;
   tax_percentage?: number;
-  address?: string;
-  registration_number?: string;
-  username?: string;
-  email?: string;
-  contact_number?: string;
-  logo_url?: string;
 }
 
 interface TenantContextType {
@@ -32,8 +27,27 @@ const TenantContext = createContext<TenantContextType>({ currentTenant: null, se
 export const useTenant = () => useContext(TenantContext);
 
 export default function App() {
-  const [currentTenant, setCurrentTenant] = useState<Tenant | null>(null);
+  const [currentTenant, setCurrentTenantState] = useState<Tenant | null>(() => {
+    const saved = localStorage.getItem('currentTenant');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  });
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const setCurrentTenant = (tenant: Tenant | null) => {
+    setCurrentTenantState(tenant);
+    if (tenant) {
+      localStorage.setItem('currentTenant', JSON.stringify(tenant));
+    } else {
+      localStorage.removeItem('currentTenant');
+    }
+  };
 
   if (!currentTenant) {
     return (
@@ -75,6 +89,7 @@ export default function App() {
               <Route path="/" element={<POS />} />
               <Route path="/inventory" element={<Inventory />} />
               <Route path="/invoices" element={<Invoices />} />
+              <Route path="/categories" element={<Categories />} />
               <Route path="/admin" element={<AdminPanel />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/manual" element={<Manual />} />
