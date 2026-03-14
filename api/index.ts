@@ -244,6 +244,38 @@ app.post('/api/invoices/:id/email', async (req, res) => {
   const { data: invoice } = await supabase.from('invoices').select('*').eq('id', invoiceId).single();
   if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
 
+  const { data: items } = await supabase.from('invoice_items').select(`
+    *,
+    products!inner(name)
+  `).eq('invoice_id', invoiceId);
+
+  const tableRows = (items || []).map((item: any) => `
+    <tr>
+      <td style="border: 1px solid #ddd; padding: 8px;">${item.products?.name || 'Unknown'}</td>
+      <td style="border: 1px solid #ddd; padding: 8px;">${item.quantity}</td>
+      <td style="border: 1px solid #ddd; padding: 8px;">$${item.price.toFixed(2)}</td>
+      <td style="border: 1px solid #ddd; padding: 8px;">$${(item.quantity * item.price).toFixed(2)}</td>
+    </tr>
+  `).join('');
+
+  const htmlBody = `
+    <h1>Invoice #${invoiceId.toString().padStart(5, '0')}</h1>
+    <table style="width: 100%; border-collapse: collapse;">
+      <thead>
+        <tr style="background-color: #f2f2f2;">
+          <th style="border: 1px solid #ddd; padding: 8px;">Product</th>
+          <th style="border: 1px solid #ddd; padding: 8px;">Quantity</th>
+          <th style="border: 1px solid #ddd; padding: 8px;">Price</th>
+          <th style="border: 1px solid #ddd; padding: 8px;">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${tableRows}
+      </tbody>
+    </table>
+    <p><strong>Total: $${invoice.total.toFixed(2)}</strong></p>
+  `;
+
   const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: Number(process.env.SMTP_PORT),
@@ -258,7 +290,7 @@ app.post('/api/invoices/:id/email', async (req, res) => {
       from: process.env.SMTP_USER,
       to: email,
       subject: `Invoice #${invoiceId.toString().padStart(5, '0')}`,
-      text: `Invoice details for #${invoiceId.toString().padStart(5, '0')}: Total $${invoice.total.toFixed(2)}`,
+      html: htmlBody,
     });
     res.json({ success: true });
   } catch (err: any) {
