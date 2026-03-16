@@ -6,6 +6,30 @@ const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://wotypimhxwjpsvgvxc
 const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_kcowi3rGFpzG4Fwlt84Zaw_aNFhT6-m';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+const formatInvoiceDate = (dateStr: string) => {
+  const date = new Date(dateStr);
+  const options: Intl.DateTimeFormatOptions = {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'Asia/Singapore',
+  };
+  const formatter = new Intl.DateTimeFormat('en-GB', options);
+  const parts = formatter.formatToParts(date);
+  
+  const day = parts.find(p => p.type === 'day')?.value;
+  const month = parts.find(p => p.type === 'month')?.value;
+  const year = parts.find(p => p.type === 'year')?.value;
+  const hour = parts.find(p => p.type === 'hour')?.value;
+  const minute = parts.find(p => p.type === 'minute')?.value;
+  const dayPeriod = parts.find(p => p.type === 'dayPeriod')?.value.toUpperCase();
+  
+  return `${day} ${month} ${year}, ${hour}:${minute}${dayPeriod} (GMT+8)`;
+};
+
 const app = express();
 
 app.use(express.json({ limit: '50mb' }));
@@ -23,14 +47,14 @@ app.get('/api/tenants', async (req, res) => {
     return res.status(403).json({ error: 'Forbidden. Super Admin access required.' });
   }
   
-  const { data: tenants } = await supabase.from('tenants').select('id, name, username, email, contact_number, tax_percentage, created_at, is_super_admin');
+  const { data: tenants } = await supabase.from('tenants').select('id, name, username, email, contact_number, tax_percentage, created_at, is_super_admin, smtp_host, smtp_port, smtp_user, smtp_pass');
   res.json(tenants);
 });
 
 app.post('/api/tenants/login', async (req, res) => {
   const { username, password } = req.body;
   const { data: tenant } = await supabase.from('tenants')
-    .select('id, name, username, email, contact_number, tax_percentage, is_super_admin, address, registration_number')
+    .select('id, name, username, email, contact_number, tax_percentage, is_super_admin, address, registration_number, smtp_host, smtp_port, smtp_user, smtp_pass')
     .ilike('username', username)
     .eq('password', password)
     .single();
@@ -105,7 +129,7 @@ app.put('/api/tenants/:id', async (req, res) => {
 
   await supabase.from('tenants').update(updateData).eq('id', req.params.id);
   
-  const { data: updatedTenant } = await supabase.from('tenants').select('id, name, username, email, contact_number, address, registration_number, tax_percentage, is_super_admin').eq('id', req.params.id).single();
+  const { data: updatedTenant } = await supabase.from('tenants').select('id, name, username, email, contact_number, address, registration_number, tax_percentage, is_super_admin, smtp_host, smtp_port, smtp_user, smtp_pass').eq('id', req.params.id).single();
   res.json({ success: true, tenant: { ...updatedTenant, is_super_admin: !!updatedTenant?.is_super_admin } });
 });
 
@@ -114,6 +138,19 @@ app.put('/api/tenants/:id/settings', async (req, res) => {
   await supabase.from('tenants').update({
     tax_percentage, address: address || null, registration_number: registration_number || null
   }).eq('id', req.params.id);
+  res.json({ success: true });
+});
+
+app.put('/api/tenants/:id/smtp', async (req, res) => {
+  const { smtp_host, smtp_port, smtp_user, smtp_pass } = req.body;
+  const { error } = await supabase.from('tenants').update({
+    smtp_host: smtp_host || null,
+    smtp_port: smtp_port || null,
+    smtp_user: smtp_user || null,
+    smtp_pass: smtp_pass || null
+  }).eq('id', req.params.id);
+  
+  if (error) return res.status(500).json({ error: 'Failed to update SMTP settings' });
   res.json({ success: true });
 });
 
@@ -262,7 +299,7 @@ app.post('/api/invoices/:id/email', async (req, res) => {
   const htmlBody = `
     <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #eee;">
       <h1 style="color: #333;">Invoice #${invoiceId.toString().padStart(5, '0')}</h1>
-      <p><strong>Date:</strong> ${new Date(invoice.created_at).toLocaleDateString()}</p>
+      <p><strong>Date:</strong> ${formatInvoiceDate(invoice.created_at)}</p>
       <div style="margin-bottom: 20px;">
         <h3>From:</h3>
         <p>${tenant?.name || 'Company Name'}<br>
@@ -291,18 +328,27 @@ app.post('/api/invoices/:id/email', async (req, res) => {
     </div>
   `;
 
+  const smtpHost = tenant?.smtp_host || process.env.SMTP_HOST;
+  const smtpPort = tenant?.smtp_port || Number(process.env.SMTP_PORT);
+  const smtpUser = tenant?.smtp_user || process.env.SMTP_USER;
+  const smtpPass = tenant?.smtp_pass || process.env.SMTP_PASS;
+
+  if (!smtpHost || !smtpUser || !smtpPass) {
+    return res.status(400).json({ error: 'SMTP settings not configured for this tenant.' });
+  }
+
   const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT),
+    host: smtpHost,
+    port: Number(smtpPort),
     auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
+      user: smtpUser,
+      pass: smtpPass,
     },
   });
 
   try {
     await transporter.sendMail({
-      from: process.env.SMTP_USER,
+      from: smtpUser,
       to: email,
       subject: `Invoice #${invoiceId.toString().padStart(5, '0')}`,
       html: htmlBody,

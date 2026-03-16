@@ -2,6 +2,30 @@ import { useState, useEffect } from 'react';
 import { useTenant } from '../App';
 import { Eye, Printer, X, Mail } from 'lucide-react';
 
+const formatInvoiceDate = (dateStr: string) => {
+  const date = new Date(dateStr);
+  const options: Intl.DateTimeFormatOptions = {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'Asia/Singapore',
+  };
+  const formatter = new Intl.DateTimeFormat('en-GB', options);
+  const parts = formatter.formatToParts(date);
+  
+  const day = parts.find(p => p.type === 'day')?.value;
+  const month = parts.find(p => p.type === 'month')?.value;
+  const year = parts.find(p => p.type === 'year')?.value;
+  const hour = parts.find(p => p.type === 'hour')?.value;
+  const minute = parts.find(p => p.type === 'minute')?.value;
+  const dayPeriod = parts.find(p => p.type === 'dayPeriod')?.value.toUpperCase();
+  
+  return `${day} ${month} ${year}, ${hour}:${minute}${dayPeriod} (GMT+8)`;
+};
+
 export default function Invoices() {
   const { currentTenant } = useTenant();
   const [invoices, setInvoices] = useState<any[]>([]);
@@ -100,7 +124,7 @@ export default function Invoices() {
                 >
                   #{invoice.id.toString().padStart(5, '0')}
                 </td>
-                <td className="px-6 py-4 text-sm text-gray-500">{new Date(invoice.created_at).toLocaleString()}</td>
+                <td className="px-6 py-4 text-sm text-gray-500">{formatInvoiceDate(invoice.created_at)}</td>
                 <td className="px-6 py-4 text-sm">
                   <select 
                     value={invoice.status || 'Completed'} 
@@ -153,7 +177,9 @@ export default function Invoices() {
                 </button>
                 <button 
                   onClick={handleEmail}
-                  className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-2"
+                  disabled={!currentTenant.smtp_host || !currentTenant.smtp_user || !currentTenant.smtp_pass}
+                  className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                  title={(!currentTenant.smtp_host || !currentTenant.smtp_user || !currentTenant.smtp_pass) ? "Configure SMTP in Settings to send emails" : "Email Invoice"}
                 >
                   <Mail size={20} />
                   <span className="text-sm font-medium">Email</span>
@@ -180,7 +206,7 @@ export default function Invoices() {
               <div className="grid grid-cols-2 gap-8 mb-8">
                 <div>
                   <h3 className="text-sm font-medium text-gray-500 mb-1">Date</h3>
-                  <p className="text-gray-900">{new Date(selectedInvoice.created_at).toLocaleString()}</p>
+                  <p className="text-gray-900">{formatInvoiceDate(selectedInvoice.created_at)}</p>
                 </div>
                 <div>
                   <h3 className="text-sm font-medium text-gray-500 mb-1">Status</h3>

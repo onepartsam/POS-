@@ -34,7 +34,12 @@ export default function Settings() {
 
   const [storeAddress, setStoreAddress] = useState('');
   const [storeRegNumber, setStoreRegNumber] = useState('');
+  const [smtpHost, setSmtpHost] = useState('');
+  const [smtpPort, setSmtpPort] = useState('');
+  const [smtpUser, setSmtpUser] = useState('');
+  const [smtpPass, setSmtpPass] = useState('');
   const [isSavingStore, setIsSavingStore] = useState(false);
+  const [isSavingSmtp, setIsSavingSmtp] = useState(false);
 
   const [accountName, setAccountName] = useState('');
   const [accountUsername, setAccountUsername] = useState('');
@@ -47,6 +52,10 @@ export default function Settings() {
     if (currentTenant) {
       setStoreAddress(currentTenant.address || '');
       setStoreRegNumber(currentTenant.registration_number || '');
+      setSmtpHost(currentTenant.smtp_host || '');
+      setSmtpPort(currentTenant.smtp_port?.toString() || '');
+      setSmtpUser(currentTenant.smtp_user || '');
+      setSmtpPass(currentTenant.smtp_pass || '');
       setAccountName(currentTenant.name || '');
       setAccountUsername(currentTenant.username || '');
       setAccountEmail(currentTenant.email || '');
@@ -124,6 +133,44 @@ export default function Settings() {
       alert('Failed to save store information.');
     } finally {
       setIsSavingStore(false);
+    }
+  };
+
+  const handleSaveSmtpSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentTenant) return;
+    
+    setIsSavingSmtp(true);
+    try {
+      const res = await fetch(`/api/tenants/${currentTenant.id}/smtp`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          smtp_host: smtpHost,
+          smtp_port: parseInt(smtpPort) || null,
+          smtp_user: smtpUser,
+          smtp_pass: smtpPass
+        })
+      });
+      
+      if (res.ok) {
+        setCurrentTenant({
+          ...currentTenant,
+          smtp_host: smtpHost,
+          smtp_port: parseInt(smtpPort) || undefined,
+          smtp_user: smtpUser,
+          smtp_pass: smtpPass
+        });
+        alert('SMTP settings saved successfully.');
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to save SMTP settings.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Failed to save SMTP settings.');
+    } finally {
+      setIsSavingSmtp(false);
     }
   };
 
@@ -391,6 +438,66 @@ export default function Settings() {
               className="bg-black text-white px-6 py-2 rounded-lg font-medium hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSavingStore ? 'Saving...' : 'Save Information'}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* SMTP Settings */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+        <h2 className="text-lg font-semibold mb-4">SMTP Settings (Email)</h2>
+        <form onSubmit={handleSaveSmtpSettings} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">SMTP Host</label>
+              <input 
+                type="text" 
+                value={smtpHost}
+                onChange={e => setSmtpHost(e.target.value)}
+                placeholder="smtp.gmail.com"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black/5 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">SMTP Port</label>
+              <input 
+                type="number" 
+                value={smtpPort}
+                onChange={e => setSmtpPort(e.target.value)}
+                placeholder="465 or 587"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black/5 focus:outline-none"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">SMTP User</label>
+              <input 
+                type="text" 
+                value={smtpUser}
+                onChange={e => setSmtpUser(e.target.value)}
+                placeholder="your-email@gmail.com"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black/5 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">SMTP Password</label>
+              <input 
+                type="password" 
+                value={smtpPass}
+                onChange={e => setSmtpPass(e.target.value)}
+                placeholder="App Password"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black/5 focus:outline-none"
+              />
+            </div>
+          </div>
+          <div className="pt-2">
+            <button 
+              type="submit" 
+              disabled={isSavingSmtp}
+              className="bg-black text-white px-6 py-2 rounded-lg font-medium hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSavingSmtp ? 'Saving...' : 'Save SMTP Settings'}
             </button>
           </div>
         </form>

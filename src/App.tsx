@@ -14,8 +14,17 @@ import { LogOut, Menu } from 'lucide-react';
 interface Tenant {
   id: number;
   name: string;
+  username: string;
+  email: string;
+  contact_number?: string;
   is_super_admin?: boolean;
   tax_percentage?: number;
+  address?: string;
+  registration_number?: string;
+  smtp_host?: string;
+  smtp_port?: number;
+  smtp_user?: string;
+  smtp_pass?: string;
 }
 
 interface TenantContextType {
