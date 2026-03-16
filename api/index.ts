@@ -365,7 +365,7 @@ app.post('/api/invoices/:id/email', async (req, res) => {
 
   try {
     await transporter.sendMail({
-      from: smtpUser,
+      from: `"${tenant.name}" <${smtpUser}>`,
       to: email,
       subject: `Invoice #${invoiceId.toString().padStart(5, '0')}`,
       html: htmlBody,
