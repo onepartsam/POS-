@@ -28,7 +28,7 @@ export default function Auth() {
         });
         const data = await res.json();
         if (res.ok) {
-          setSuccessMsg(`Your password is: ${data.password}`);
+          setSuccessMsg(data.message);
         } else {
           setError(data.error || 'Failed to recover password');
         }

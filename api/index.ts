@@ -1,6 +1,7 @@
 import express from 'express';
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
+import bcrypt from 'bcryptjs';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://wotypimhxwjpsvgvxcch.supabase.co';
 const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_kcowi3rGFpzG4Fwlt84Zaw_aNFhT6-m';
@@ -54,13 +55,13 @@ app.get('/api/tenants', async (req, res) => {
 app.post('/api/tenants/login', async (req, res) => {
   const { username, password } = req.body;
   const { data: tenant } = await supabase.from('tenants')
-    .select('id, name, username, email, contact_number, tax_percentage, is_super_admin, address, registration_number, smtp_host, smtp_port, smtp_user, smtp_pass')
+    .select('id, name, username, email, contact_number, tax_percentage, is_super_admin, address, registration_number, smtp_host, smtp_port, smtp_user, smtp_pass, password')
     .ilike('username', username)
-    .eq('password', password)
     .single();
     
-  if (tenant) {
-    res.json({ ...tenant, is_super_admin: !!tenant.is_super_admin });
+  if (tenant && await bcrypt.compare(password, tenant.password)) {
+    const { password: _, ...tenantWithoutPassword } = tenant;
+    res.json({ ...tenantWithoutPassword, is_super_admin: !!tenant.is_super_admin });
   } else {
     res.status(401).json({ error: 'Invalid credentials' });
   }
@@ -69,13 +70,13 @@ app.post('/api/tenants/login', async (req, res) => {
 app.post('/api/tenants/forgot-password', async (req, res) => {
   const { username, email } = req.body;
   const { data: tenant } = await supabase.from('tenants')
-    .select('password')
+    .select('id')
     .ilike('username', username)
     .ilike('email', email)
     .single();
     
   if (tenant) {
-    res.json({ success: true, password: tenant.password });
+    res.json({ success: true, message: 'If an account exists with this username and email, you will receive instructions to reset your password. (Please contact system administrator for manual reset for now)' });
   } else {
     res.status(404).json({ error: 'No account found with that username and email' });
   }
@@ -89,8 +90,10 @@ app.post('/api/tenants', async (req, res) => {
     return res.status(400).json({ error: 'Username already exists' });
   }
 
+  const hashedPassword = await bcrypt.hash(password, 10);
+
   const { data: newTenant, error } = await supabase.from('tenants').insert({
-    name, username, email, contact_number, address: address || null, registration_number: registration_number || null, password, is_super_admin: is_super_admin ? 1 : 0
+    name, username, email, contact_number, address: address || null, registration_number: registration_number || null, password: hashedPassword, is_super_admin: is_super_admin ? 1 : 0
   }).select('id, name, username, email, contact_number, address, registration_number, tax_percentage, is_super_admin').single();
   
   if (error) return res.status(500).json({ error: error.message });
@@ -125,7 +128,9 @@ app.put('/api/tenants/:id', async (req, res) => {
   const updateData: any = {
     name, username, email, contact_number, address: finalAddress, registration_number: finalRegNumber, is_super_admin: is_super_admin ? 1 : 0
   };
-  if (password) updateData.password = password;
+  if (password) {
+    updateData.password = await bcrypt.hash(password, 10);
+  }
 
   await supabase.from('tenants').update(updateData).eq('id', req.params.id);
   
