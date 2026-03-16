@@ -286,7 +286,15 @@ app.post('/api/invoices/:id/email', async (req, res) => {
   const { data: invoice } = await supabase.from('invoices').select('*').eq('id', invoiceId).single();
   if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
 
-  const { data: tenant } = await supabase.from('tenants').select('*').eq('id', invoice.tenant_id).single();
+  const { data: tenant, error: tenantError } = await supabase.from('tenants')
+    .select('id, name, address, registration_number, smtp_host, smtp_port, smtp_user, smtp_pass')
+    .eq('id', invoice.tenant_id)
+    .single();
+    
+  if (tenantError || !tenant) {
+    return res.status(404).json({ error: 'Tenant not found' });
+  }
+
   const { data: items } = await supabase.from('invoice_items').select(`
     *,
     products!inner(name)
@@ -334,21 +342,25 @@ app.post('/api/invoices/:id/email', async (req, res) => {
   `;
 
   const smtpHost = tenant?.smtp_host || process.env.SMTP_HOST;
-  const smtpPort = tenant?.smtp_port || Number(process.env.SMTP_PORT);
+  const smtpPort = tenant?.smtp_port || Number(process.env.SMTP_PORT) || 587;
   const smtpUser = tenant?.smtp_user || process.env.SMTP_USER;
   const smtpPass = tenant?.smtp_pass || process.env.SMTP_PASS;
 
   if (!smtpHost || !smtpUser || !smtpPass) {
-    return res.status(400).json({ error: 'SMTP settings not configured for this tenant.' });
+    return res.status(400).json({ error: 'SMTP settings not configured correctly. Please check your settings.' });
   }
 
   const transporter = nodemailer.createTransport({
     host: smtpHost,
     port: Number(smtpPort),
+    secure: Number(smtpPort) === 465,
     auth: {
       user: smtpUser,
       pass: smtpPass,
     },
+    tls: {
+      rejectUnauthorized: false
+    }
   });
 
   try {
