@@ -11,6 +11,7 @@ interface SidebarProps {
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const location = useLocation();
   const { currentTenant, setCurrentTenant } = useTenant();
+  const isAdmin = currentTenant?.role?.toLowerCase() === 'admin' || (currentTenant as any)?.is_super_admin;
   
   return (
     <>
@@ -48,7 +49,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           <NavItem to="/inventory" icon={<Database size={22} />} active={location.pathname === '/inventory'} onClick={onClose} />
           <NavItem to="/categories" icon={<Tag size={22} />} active={location.pathname === '/categories'} onClick={onClose} />
           <NavItem to="/invoices" icon={<CreditCard size={22} />} active={location.pathname === '/invoices'} onClick={onClose} />
-          {currentTenant?.is_super_admin && (
+          {isAdmin && (
             <NavItem to="/admin" icon={<Users size={22} />} active={location.pathname === '/admin'} onClick={onClose} />
           )}
         </nav>

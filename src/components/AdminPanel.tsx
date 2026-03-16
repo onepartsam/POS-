@@ -11,25 +11,26 @@ export default function AdminPanel() {
   const [newTenantEmail, setNewTenantEmail] = useState('');
   const [newTenantContact, setNewTenantContact] = useState('');
   const [newTenantPassword, setNewTenantPassword] = useState('');
-  const [newTenantIsSuperAdmin, setNewTenantIsSuperAdmin] = useState(false);
+  const [newTenantRole, setNewTenantRole] = useState<'Free' | 'Premium' | 'Admin'>('Free');
+  const isAdmin = currentTenant?.role?.toLowerCase() === 'admin' || (currentTenant as any)?.is_super_admin;
 
   const [editingTenantId, setEditingTenantId] = useState<number | null>(null);
   const [editFormData, setEditFormData] = useState<any>({});
   const [tenantToDelete, setTenantToDelete] = useState<{ id: number, name: string } | null>(null);
 
   useEffect(() => {
-    if (currentTenant?.is_super_admin) {
-      fetch(`/api/tenants?tenantId=${currentTenant.id}`)
+    if (isAdmin) {
+      fetch(`/api/tenants?tenantId=${currentTenant?.id}`)
         .then(res => res.json())
         .then(data => {
           if (Array.isArray(data)) setTenants(data);
         });
     }
-  }, [currentTenant]);
+  }, [currentTenant, isAdmin]);
 
-  if (!currentTenant?.is_super_admin) {
+  if (!isAdmin) {
     return (
-      <div className="p-8 w-full max-w-4xl mx-auto">
+      <div className="p-8 w-full">
         <div className="bg-red-50 text-red-600 p-6 rounded-xl border border-red-100">
           <h2 className="text-lg font-bold">Access Denied</h2>
           <p>You do not have Super Admin rights to view this page.</p>
@@ -50,7 +51,7 @@ export default function AdminPanel() {
         email: newTenantEmail,
         contact_number: newTenantContact,
         password: newTenantPassword, 
-        is_super_admin: newTenantIsSuperAdmin 
+        role: newTenantRole 
       })
     });
     const data = await res.json();
@@ -62,14 +63,14 @@ export default function AdminPanel() {
         email: newTenantEmail,
         contact_number: newTenantContact,
         created_at: new Date().toISOString(), 
-        is_super_admin: data.is_super_admin 
+        role: data.role 
       }]);
       setNewTenantName('');
       setNewTenantUsername('');
       setNewTenantEmail('');
       setNewTenantContact('');
       setNewTenantPassword('');
-      setNewTenantIsSuperAdmin(false);
+      setNewTenantRole('Free');
     } else {
       alert(data.error || 'Failed to add tenant');
     }
@@ -83,7 +84,7 @@ export default function AdminPanel() {
       email: tenant.email,
       contact_number: tenant.contact_number,
       password: '', // Leave blank unless changing
-      is_super_admin: tenant.is_super_admin
+      role: tenant.role
     });
   };
 
@@ -95,7 +96,7 @@ export default function AdminPanel() {
     });
     
     if (res.ok) {
-      setTenants(tenants.map(t => t.id === id ? { ...t, ...editFormData, is_super_admin: editFormData.is_super_admin ? 1 : 0 } : t));
+      setTenants(tenants.map(t => t.id === id ? { ...t, ...editFormData } : t));
       setEditingTenantId(null);
     } else {
       const data = await res.json();
@@ -122,7 +123,7 @@ export default function AdminPanel() {
   };
 
   return (
-    <div className="p-8 w-full max-w-4xl mx-auto">
+    <div className="p-8 w-full">
       <h1 className="text-2xl font-bold mb-6">Admin Panel - Manage Tenants</h1>
       
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-8">
@@ -170,15 +171,15 @@ export default function AdminPanel() {
               className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black/5 focus:outline-none"
             />
             <div className="flex items-center gap-4">
-              <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={newTenantIsSuperAdmin}
-                  onChange={e => setNewTenantIsSuperAdmin(e.target.checked)}
-                  className="rounded border-gray-300 text-black focus:ring-black w-4 h-4"
-                />
-                Super Admin
-              </label>
+              <select 
+                value={newTenantRole}
+                onChange={e => setNewTenantRole(e.target.value as any)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black/5 focus:outline-none bg-white text-sm"
+              >
+                <option value="Free">Free</option>
+                <option value="Premium">Premium</option>
+                <option value="Admin">Admin</option>
+              </select>
               <button type="submit" className="bg-black text-white px-6 py-2 rounded-lg font-medium hover:bg-gray-800 ml-auto">
                 Add Tenant
               </button>
@@ -187,8 +188,8 @@ export default function AdminPanel() {
         </form>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <table className="w-full text-left">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-x-auto">
+        <table className="w-full text-left min-w-full">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
               <th className="px-6 py-3 text-sm font-medium text-gray-500">ID</th>
@@ -227,13 +228,15 @@ export default function AdminPanel() {
                         type="password" value={editFormData.password} onChange={e => setEditFormData({...editFormData, password: e.target.value})} 
                         className="px-2 py-1 border rounded text-sm" placeholder="New Password (optional)"
                       />
-                      <label className="flex items-center gap-2 text-sm">
-                        <input 
-                          type="checkbox" checked={editFormData.is_super_admin} onChange={e => setEditFormData({...editFormData, is_super_admin: e.target.checked})} 
-                          className="rounded border-gray-300"
-                        />
-                        Super Admin
-                      </label>
+                      <select 
+                        value={editFormData.role} 
+                        onChange={e => setEditFormData({...editFormData, role: e.target.value})} 
+                        className="px-2 py-1 border rounded text-sm bg-white"
+                      >
+                        <option value="Free">Free</option>
+                        <option value="Premium">Premium</option>
+                        <option value="Admin">Admin</option>
+                      </select>
                     </div>
                   </td>
                 ) : (
@@ -245,10 +248,12 @@ export default function AdminPanel() {
                       <div>{tenant.contact_number}</div>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-500">
-                      {tenant.is_super_admin ? (
-                        <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs font-medium">Super Admin</span>
+                      {tenant.role === 'Admin' ? (
+                        <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs font-medium">Admin</span>
+                      ) : tenant.role === 'Premium' ? (
+                        <span className="bg-emerald-100 text-emerald-800 px-2 py-1 rounded text-xs font-medium">Premium</span>
                       ) : (
-                        <span className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs font-medium">Tenant</span>
+                        <span className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs font-medium">Free</span>
                       )}
                     </td>
                   </>

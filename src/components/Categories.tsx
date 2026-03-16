@@ -67,7 +67,7 @@ export default function Categories() {
   };
 
   return (
-    <div className="p-8 w-full max-w-4xl mx-auto space-y-8">
+    <div className="p-8 w-full space-y-8">
       <h1 className="text-2xl font-bold">Categories Management</h1>
       
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">

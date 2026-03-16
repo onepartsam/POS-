@@ -17,7 +17,7 @@ interface Tenant {
   username: string;
   email: string;
   contact_number?: string;
-  is_super_admin?: boolean;
+  role?: 'Free' | 'Premium' | 'Admin';
   tax_percentage?: number;
   address?: string;
   registration_number?: string;
@@ -48,6 +48,19 @@ export default function App() {
     return null;
   });
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (currentTenant?.id) {
+      fetch(`/api/tenants/me?tenantId=${currentTenant.id}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data && !data.error) {
+            setCurrentTenant(data);
+          }
+        })
+        .catch(err => console.error('Failed to refresh tenant data', err));
+    }
+  }, []);
 
   const setCurrentTenant = (tenant: Tenant | null) => {
     setCurrentTenantState(tenant);

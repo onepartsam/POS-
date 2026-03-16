@@ -20,6 +20,7 @@ export default function Inventory() {
 
   useEffect(() => {
     if (currentTenant) {
+      console.log('Current Tenant Role:', currentTenant.role);
       fetchProducts();
       fetchCategories();
     }
@@ -207,7 +208,7 @@ export default function Inventory() {
   if (!currentTenant) return <div className="p-8">Please select a tenant first.</div>;
 
   return (
-    <div className="p-8 w-full max-w-6xl mx-auto">
+    <div className="p-8 w-full">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Inventory Management</h1>
         <button 
@@ -258,22 +259,30 @@ export default function Inventory() {
                   onChange={e => setFormData({...formData, image: e.target.value})} 
                   className="flex-1 px-3 py-2 border rounded-lg" 
                 />
-                <span className="text-gray-500 text-sm">or</span>
-                <input 
-                  type="file" 
-                  accept="image/*"
-                  ref={fileInputRef}
-                  onChange={handleImageUpload}
-                  className="hidden" 
-                />
-                <button 
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors whitespace-nowrap"
-                >
-                  <Upload size={16} />
-                  Upload Image
-                </button>
+                {(() => {
+                  const role = currentTenant?.role?.toLowerCase();
+                  const isEligible = role === 'admin' || role === 'premium' || (currentTenant as any)?.is_super_admin;
+                  return isEligible && (
+                    <>
+                      <span className="text-gray-500 text-sm">or</span>
+                      <input 
+                        type="file" 
+                        accept="image/*"
+                        ref={fileInputRef}
+                        onChange={handleImageUpload}
+                        className="hidden" 
+                      />
+                      <button 
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors whitespace-nowrap"
+                      >
+                        <Upload size={16} />
+                        Upload Image
+                      </button>
+                    </>
+                  );
+                })()}
               </div>
               {formData.image && (
                 <div className="mt-2">
@@ -316,8 +325,8 @@ export default function Inventory() {
         </div>
       )}
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <table className="w-full text-left">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-x-auto">
+        <table className="w-full text-left min-w-full">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
               <th className="px-6 py-3 text-sm font-medium text-gray-500">Product</th>

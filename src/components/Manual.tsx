@@ -3,7 +3,7 @@ import { ShoppingCart, Database, CreditCard, Users, Settings, HelpCircle } from 
 
 export default function Manual() {
   return (
-    <div className="p-4 md:p-8 w-full max-w-4xl mx-auto space-y-8">
+    <div className="p-4 md:p-8 w-full space-y-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">Instruction Manual</h1>
         <p className="text-gray-600">Welcome to your Point of Sale system. This guide will help you understand how to use the various features available to you.</p>

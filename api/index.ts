@@ -39,29 +39,45 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 // --- API Routes ---
 
 // Tenants
+app.get('/api/tenants/me', async (req, res) => {
+  const tenantId = req.query.tenantId;
+  if (!tenantId) return res.status(401).json({ error: 'Unauthorized' });
+  
+  const { data: tenant } = await supabase.from('tenants')
+    .select('id, name, username, email, contact_number, tax_percentage, role, address, registration_number, smtp_host, smtp_port, smtp_user, smtp_pass')
+    .eq('id', tenantId)
+    .single();
+    
+  if (tenant) {
+    res.json(tenant);
+  } else {
+    res.status(404).json({ error: 'Tenant not found' });
+  }
+});
+
 app.get('/api/tenants', async (req, res) => {
   const tenantId = req.query.tenantId;
   if (!tenantId) return res.status(401).json({ error: 'Unauthorized' });
   
-  const { data: requestor } = await supabase.from('tenants').select('is_super_admin').eq('id', tenantId).single();
-  if (!requestor || !requestor.is_super_admin) {
-    return res.status(403).json({ error: 'Forbidden. Super Admin access required.' });
+  const { data: requestor } = await supabase.from('tenants').select('role').eq('id', tenantId).single();
+  if (!requestor || requestor.role?.toLowerCase() !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden. Admin access required.' });
   }
   
-  const { data: tenants } = await supabase.from('tenants').select('id, name, username, email, contact_number, tax_percentage, created_at, is_super_admin, smtp_host, smtp_port, smtp_user, smtp_pass');
+  const { data: tenants } = await supabase.from('tenants').select('id, name, username, email, contact_number, tax_percentage, created_at, role, smtp_host, smtp_port, smtp_user, smtp_pass');
   res.json(tenants);
 });
 
 app.post('/api/tenants/login', async (req, res) => {
   const { username, password } = req.body;
   const { data: tenant } = await supabase.from('tenants')
-    .select('id, name, username, email, contact_number, tax_percentage, is_super_admin, address, registration_number, smtp_host, smtp_port, smtp_user, smtp_pass, password')
+    .select('id, name, username, email, contact_number, tax_percentage, role, address, registration_number, smtp_host, smtp_port, smtp_user, smtp_pass, password')
     .ilike('username', username)
     .single();
     
   if (tenant && await bcrypt.compare(password, tenant.password)) {
     const { password: _, ...tenantWithoutPassword } = tenant;
-    res.json({ ...tenantWithoutPassword, is_super_admin: !!tenant.is_super_admin });
+    res.json(tenantWithoutPassword);
   } else {
     res.status(401).json({ error: 'Invalid credentials' });
   }
@@ -70,20 +86,70 @@ app.post('/api/tenants/login', async (req, res) => {
 app.post('/api/tenants/forgot-password', async (req, res) => {
   const { username, email } = req.body;
   const { data: tenant } = await supabase.from('tenants')
-    .select('id')
+    .select('id, name')
     .ilike('username', username)
     .ilike('email', email)
     .single();
     
   if (tenant) {
-    res.json({ success: true, message: 'If an account exists with this username and email, you will receive instructions to reset your password. (Please contact system administrator for manual reset for now)' });
+    const tempPassword = Math.random().toString(36).slice(-8);
+    const hashedPassword = await bcrypt.hash(tempPassword, 10);
+    
+    const { error: updateError } = await supabase.from('tenants').update({ password: hashedPassword }).eq('id', tenant.id);
+    if (updateError) return res.status(500).json({ error: 'Failed to update temporary password' });
+
+    const smtpHost = process.env.SMTP_HOST;
+    const smtpPort = Number(process.env.SMTP_PORT) || 587;
+    const smtpUser = process.env.SMTP_USER;
+    const smtpPass = process.env.SMTP_PASS;
+
+    if (!smtpHost || !smtpUser || !smtpPass) {
+      return res.status(500).json({ error: 'System SMTP settings not configured. Please contact administrator.' });
+    }
+
+    const transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpPort === 465,
+      auth: { user: smtpUser, pass: smtpPass },
+      tls: { rejectUnauthorized: false }
+    });
+
+    try {
+      await transporter.sendMail({
+        from: {
+          name: 'System Admin',
+          address: smtpUser
+        },
+        to: email,
+        subject: 'Temporary Password for Your Store',
+        html: `
+          <div style="font-family: sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 10px; max-width: 500px; margin: auto;">
+            <h2 style="color: #333;">Password Recovery</h2>
+            <p>Hello <strong>${tenant.name}</strong>,</p>
+            <p>You requested a password recovery for your store account.</p>
+            <div style="background: #f9f9f9; padding: 15px; border-radius: 5px; text-align: center; margin: 20px 0;">
+              <p style="margin: 0; color: #666; font-size: 0.9em;">Your temporary password is:</p>
+              <h3 style="margin: 5px 0; font-family: monospace; font-size: 1.5em; letter-spacing: 2px;">${tempPassword}</h3>
+            </div>
+            <p>Please log in and change your password in the settings immediately.</p>
+            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+            <p style="font-size: 0.8em; color: #999;">If you did not request this, please ignore this email.</p>
+          </div>
+        `
+      });
+      res.json({ success: true, message: 'A temporary password has been sent to your email.' });
+    } catch (err: any) {
+      console.error('Failed to send recovery email', err);
+      res.status(500).json({ error: `Failed to send email: ${err.message}` });
+    }
   } else {
     res.status(404).json({ error: 'No account found with that username and email' });
   }
 });
 
 app.post('/api/tenants', async (req, res) => {
-  const { name, username, email, contact_number, address, registration_number, password, is_super_admin } = req.body;
+  const { name, username, email, contact_number, address, registration_number, password, role } = req.body;
   
   const { data: existing } = await supabase.from('tenants').select('id').ilike('username', username).maybeSingle();
   if (existing) {
@@ -93,27 +159,27 @@ app.post('/api/tenants', async (req, res) => {
   const hashedPassword = await bcrypt.hash(password, 10);
 
   const { data: newTenant, error } = await supabase.from('tenants').insert({
-    name, username, email, contact_number, address: address || null, registration_number: registration_number || null, password: hashedPassword, is_super_admin: is_super_admin ? 1 : 0
-  }).select('id, name, username, email, contact_number, address, registration_number, tax_percentage, is_super_admin').single();
+    name, username, email, contact_number, address: address || null, registration_number: registration_number || null, password: hashedPassword, role: role || 'Free'
+  }).select('id, name, username, email, contact_number, address, registration_number, tax_percentage, role').single();
   
   if (error) return res.status(500).json({ error: error.message });
-  res.json({ ...newTenant, is_super_admin: !!newTenant.is_super_admin });
+  res.json(newTenant);
 });
 
 app.put('/api/tenants/:id', async (req, res) => {
   const tenantId = req.query.tenantId;
   if (!tenantId) return res.status(401).json({ error: 'Unauthorized' });
   
-  const { data: requestor } = await supabase.from('tenants').select('is_super_admin').eq('id', tenantId).single();
-  if (!requestor || (!requestor.is_super_admin && String(tenantId) !== String(req.params.id))) {
-    return res.status(403).json({ error: 'Forbidden. Super Admin access or self-edit required.' });
+  const { data: requestor } = await supabase.from('tenants').select('role').eq('id', tenantId).single();
+  if (!requestor || (requestor.role?.toLowerCase() !== 'admin' && String(tenantId) !== String(req.params.id))) {
+    return res.status(403).json({ error: 'Forbidden. Admin access or self-edit required.' });
   }
 
-  let { name, username, email, contact_number, address, registration_number, password, is_super_admin } = req.body;
+  let { name, username, email, contact_number, address, registration_number, password, role } = req.body;
   
-  if (!requestor.is_super_admin) {
-    const { data: currentTarget } = await supabase.from('tenants').select('is_super_admin').eq('id', req.params.id).single();
-    is_super_admin = currentTarget ? currentTarget.is_super_admin : 0;
+  if (requestor.role?.toLowerCase() !== 'admin') {
+    const { data: currentTarget } = await supabase.from('tenants').select('role').eq('id', req.params.id).single();
+    role = currentTarget ? currentTarget.role : 'Free';
   }
   
   const { data: existing } = await supabase.from('tenants').select('id').ilike('username', username).neq('id', req.params.id).maybeSingle();
@@ -126,7 +192,7 @@ app.put('/api/tenants/:id', async (req, res) => {
   const finalRegNumber = registration_number !== undefined ? (registration_number || null) : currentTenant?.registration_number;
 
   const updateData: any = {
-    name, username, email, contact_number, address: finalAddress, registration_number: finalRegNumber, is_super_admin: is_super_admin ? 1 : 0
+    name, username, email, contact_number, address: finalAddress, registration_number: finalRegNumber, role: role || 'Free'
   };
   if (password) {
     updateData.password = await bcrypt.hash(password, 10);
@@ -134,8 +200,8 @@ app.put('/api/tenants/:id', async (req, res) => {
 
   await supabase.from('tenants').update(updateData).eq('id', req.params.id);
   
-  const { data: updatedTenant } = await supabase.from('tenants').select('id, name, username, email, contact_number, address, registration_number, tax_percentage, is_super_admin, smtp_host, smtp_port, smtp_user, smtp_pass').eq('id', req.params.id).single();
-  res.json({ success: true, tenant: { ...updatedTenant, is_super_admin: !!updatedTenant?.is_super_admin } });
+  const { data: updatedTenant } = await supabase.from('tenants').select('id, name, username, email, contact_number, address, registration_number, tax_percentage, role, smtp_host, smtp_port, smtp_user, smtp_pass').eq('id', req.params.id).single();
+  res.json({ success: true, tenant: updatedTenant });
 });
 
 app.put('/api/tenants/:id/settings', async (req, res) => {
@@ -163,9 +229,9 @@ app.delete('/api/tenants/:id', async (req, res) => {
   const tenantId = req.query.tenantId;
   if (!tenantId) return res.status(401).json({ error: 'Unauthorized' });
   
-  const { data: requestor } = await supabase.from('tenants').select('is_super_admin').eq('id', tenantId).single();
-  if (!requestor || !requestor.is_super_admin) {
-    return res.status(403).json({ error: 'Forbidden. Super Admin access required.' });
+  const { data: requestor } = await supabase.from('tenants').select('role').eq('id', tenantId).single();
+  if (!requestor || requestor.role?.toLowerCase() !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden. Admin access required.' });
   }
   if (req.params.id === String(tenantId)) {
     return res.status(400).json({ error: 'Cannot delete yourself' });
@@ -365,7 +431,10 @@ app.post('/api/invoices/:id/email', async (req, res) => {
 
   try {
     await transporter.sendMail({
-      from: `"${tenant.name}" <${smtpUser}>`,
+      from: {
+        name: tenant.name,
+        address: smtpUser
+      },
       to: email,
       subject: `Invoice #${invoiceId.toString().padStart(5, '0')}`,
       html: htmlBody,

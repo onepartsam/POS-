@@ -83,7 +83,7 @@ export default function Settings() {
           password: accountPassword || undefined,
           address: currentTenant.address,
           registration_number: currentTenant.registration_number,
-          is_super_admin: currentTenant.is_super_admin
+          role: currentTenant.role
         })
       });
       
@@ -337,7 +337,7 @@ export default function Settings() {
   };
 
   return (
-    <div className="p-8 w-full max-w-4xl mx-auto space-y-8">
+    <div className="p-8 w-full space-y-8">
       <h1 className="text-2xl font-bold">Store Settings</h1>
       
       {/* Account Settings */}

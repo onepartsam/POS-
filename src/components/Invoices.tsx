@@ -101,11 +101,11 @@ export default function Invoices() {
   if (!currentTenant) return <div className="p-8">Please select a tenant first.</div>;
 
   return (
-    <div className="p-8 w-full max-w-5xl mx-auto">
+    <div className="p-8 w-full">
       <h1 className="text-2xl font-bold mb-6 print:hidden">Invoices</h1>
       
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden print:hidden">
-        <table className="w-full text-left">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-x-auto print:hidden">
+        <table className="w-full text-left min-w-full">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
               <th className="px-6 py-3 text-sm font-medium text-gray-500">Invoice ID</th>
